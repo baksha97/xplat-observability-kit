@@ -11,7 +11,7 @@ pluginManagement {
     }
 }
 
-rootProject.name = "playground"
+rootProject.name = "KotlinModernAOP"
 
 include(":workload")
-include(":test-processor")
+include(":monitor")

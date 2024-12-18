@@ -1,5 +1,6 @@
 package monitorable
 
+import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.processing.*
 import com.google.devtools.ksp.symbol.*
 import com.google.devtools.ksp.validate
@@ -101,14 +102,8 @@ class MonitorableProcessor(
             )
 
         // Generate monitored functions
-        val builtIns = setOf(
-            "equals",
-            "hashCode",
-            "toString"
-        )
         declaration
-            .getAllFunctions()
-            .filter { !builtIns.contains(it.simpleName.asString()) }
+            .getDeclaredFunctions()
             .forEach { function ->
                 if (function.validate()) {
                     generateMonitoredFunction(function, classBuilder, config)
@@ -134,13 +129,32 @@ class MonitorableProcessor(
                 )
             """.trimIndent())
             .build()
-
+        val extensionFunVararg = FunSpec.builder("monitored")
+            .receiver(declaration.asClassName())
+            .returns(declaration.asClassName())
+            .addParameter(
+                ParameterSpec.builder(
+                    "collectors",
+                    ClassName("monitorable", "MonitorCollector")
+                )
+                    .addModifiers(KModifier.VARARG)
+                    .build()
+            )
+            .addCode("""
+                return ${proxyClassName}(
+                    impl = this,
+                    collector = CompositeCollector(*collectors)
+                )
+            """.trimIndent())
+            .build()
         val file = FileSpec.builder(packageName, proxyClassName)
             .addImport("monitorable", "MonitorData")
+            .addImport("monitorable", "CompositeCollector")
             .addImport("monitorable", "MonitorCollector")
             .addImport("monitorable", "LoggingCollector")
             .addType(classBuilder.build())
             .addFunction(extensionFun)
+            .addFunction(extensionFunVararg)
             .build()
 
         codeGenerator.createNewFile(

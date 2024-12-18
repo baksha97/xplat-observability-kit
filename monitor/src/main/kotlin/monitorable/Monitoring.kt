@@ -18,6 +18,8 @@ interface MonitorCollector {
 interface Monitorable <T> {
     fun monitored(collector: MonitorCollector = LoggingCollector()): T
 }
+
+
 class CompositeCollector(
     private val collectors: List<MonitorCollector>
 ) : MonitorCollector {

@@ -3,15 +3,10 @@ plugins {
     kotlin("jvm")
 }
 
-version = "1.0-SNAPSHOT"
+version = "0.0.1"
 
 dependencies {
     implementation(kotlin("stdlib"))
-    implementation(project(":test-processor"))
-    ksp(project(":test-processor"))
-}
-
-ksp {
-    arg("option1", "value1")
-    arg("option2", "value2")
+    implementation(project(":monitor"))
+    ksp(project(":monitor"))
 }
