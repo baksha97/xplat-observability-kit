@@ -8,6 +8,13 @@ import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import java.io.OutputStreamWriter
 
+private const val ANNOTATION_FQN = "monitorable.Monitor.Collectable"
+private const val FUNCTION_ANNOTATION_FQN = "Monitor.Function"
+private const val COLLECTOR_SIMPLE_TYPE = "Monitor.Collector"
+private const val DATA_SIMPLE_TYPE = "Monitor.Data"
+private const val DEFAULT_COLLECTOR_SIMPLE_TYPE = "monitorable.Monitor.Collector.Printer"
+private const val COMPOSITE_COLLECTOR_SIMPLE_TYPE = "monitorable.Monitor.Collector.Composite"
+
 class MonitorableProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger
@@ -38,8 +45,8 @@ class MonitorableProcessor(
     override fun process(resolver: Resolver): List<KSAnnotated> {
         logger.info("MonitorableProcessor running")
 
-        val symbols = resolver.getSymbolsWithAnnotation("monitorable.Monitoring")
-        logger.info("Found ${symbols.count()} symbols with @Monitoring")
+        val symbols = resolver.getSymbolsWithAnnotation(ANNOTATION_FQN)
+        logger.info("Found ${symbols.count()} symbols with @$ANNOTATION_FQN")
 
         val ret = symbols.filter { !it.validate() }.toList()
 
@@ -63,7 +70,7 @@ class MonitorableProcessor(
         val proxyClassName = "${interfaceName}MonitoringProxy"
 
         val monitorableAnnotation = declaration.annotations.find {
-            it.annotationType.resolve().declaration.qualifiedName?.asString() == "monitorable.Monitorable"
+            it.annotationType.resolve().declaration.qualifiedName?.asString() == ANNOTATION_FQN
         }
 
         // Create the proxy class as private
@@ -75,7 +82,7 @@ class MonitorableProcessor(
             .addParameter("impl", declaration.asClassName())
             .addParameter(
                 "collector",
-                ClassName("monitorable", "MonitorCollector")
+                ClassName("monitorable", COLLECTOR_SIMPLE_TYPE)
             )
 
         classBuilder.primaryConstructor(constructorBuilder.build())
@@ -88,7 +95,7 @@ class MonitorableProcessor(
             .addProperty(
                 PropertySpec.builder(
                     "collector",
-                    ClassName("monitorable", "MonitorCollector")
+                    ClassName("monitorable", COLLECTOR_SIMPLE_TYPE)
                 )
                     .initializer("collector")
                     .addModifiers(KModifier.PRIVATE)
@@ -111,9 +118,9 @@ class MonitorableProcessor(
             .addParameter(
                 ParameterSpec.builder(
                     "collector",
-                    ClassName("monitorable", "MonitorCollector")
+                    ClassName("monitorable", COLLECTOR_SIMPLE_TYPE)
                 )
-                    .defaultValue("LoggingCollector()")
+                    .defaultValue("$DEFAULT_COLLECTOR_SIMPLE_TYPE()")
                     .build()
             )
             .addCode("""
@@ -129,7 +136,7 @@ class MonitorableProcessor(
             .addParameter(
                 ParameterSpec.builder(
                     "collectors",
-                    ClassName("monitorable", "MonitorCollector")
+                    ClassName("monitorable", COLLECTOR_SIMPLE_TYPE)
                 )
                     .addModifiers(KModifier.VARARG)
                     .build()
@@ -137,15 +144,12 @@ class MonitorableProcessor(
             .addCode("""
                 return ${proxyClassName}(
                     impl = this,
-                    collector = CompositeCollector(*collectors)
+                    collector = $COMPOSITE_COLLECTOR_SIMPLE_TYPE(*collectors)
                 )
             """.trimIndent())
             .build()
         val file = FileSpec.builder(packageName, proxyClassName)
-            .addImport("monitorable", "MonitorData")
-            .addImport("monitorable", "CompositeCollector")
-            .addImport("monitorable", "MonitorCollector")
-            .addImport("monitorable", "LoggingCollector")
+            .addImport("monitorable", "Monitor")
             .addImport("kotlin.time", "measureTimedValue")
             .addType(classBuilder.build())
             .addFunction(extensionFun)
@@ -166,7 +170,7 @@ class MonitorableProcessor(
     private fun extractMethodName(function: KSFunctionDeclaration): String {
         // Find MonitorMethod annotation if it exists
         val monitorMethodAnnotation = function.annotations.find {
-            it.annotationType.resolve().declaration.qualifiedName?.asString() == "monitorable.MonitorMethod"
+            it.annotationType.resolve().declaration.qualifiedName?.asString() == FUNCTION_ANNOTATION_FQN
         }
 
         // Extract custom name if annotation is present, otherwise use function name
@@ -198,46 +202,28 @@ class MonitorableProcessor(
         val paramNames = function.parameters.joinToString(", ") { it.name?.asString() ?: "_" }
 
 
-        val code = buildString {
-            if (isResultReturn) {
-                append("""
-            |val measured = measureTimedValue { 
-            |    impl.${function.simpleName.asString()}($paramNames)
-            |}
-            |
-            |collector.onCollection(
-            |    MonitorData(
+
+        fun generateImplCall() = "impl.${function.simpleName.asString()}($paramNames)"
+        fun generateMeasuredVal() =
+            if (isResultReturn) "val measured = measureTimedValue { ${generateImplCall()} }"
+            else "val measured = measureTimedValue { runCatching { ${generateImplCall()} } }"
+        fun generateOnCollectionCode() = """
+            collector.invoke(
+            |    $DATA_SIMPLE_TYPE(
             |        methodName = "$methodName",
             |        durationMillis = measured.duration.inWholeMilliseconds,
-            |        successful = measured.value.isSuccess,
             |        exception = measured.value.exceptionOrNull()
             |    )
-            |)
-            |
-            |return measured.value
-            |""".trimMargin())
-            } else {
-                append("""
-            |var exception: Throwable? = null
-            |val measured = measureTimedValue { 
-            |    kotlin.runCatching {
-            |        impl.${function.simpleName.asString()}($paramNames)
-            |    }
-            |}
-            |
-            |collector.onCollection(
-            |    MonitorData(
-            |        methodName = "$methodName",
-            |        durationMillis = measured.duration.inWholeMilliseconds,
-            |        successful = measured.value.isSuccess,
-            |        exception = measured.value.exceptionOrNull()
-            |    )
-            |)
-            |
-            |return measured.value.getOrThrow()
-            |""".trimMargin())
-            }
-        }
+            |)""".trimIndent()
+        fun generateReturn() =
+            if (isResultReturn) "return measured.value"
+            else "return measured.value.getOrThrow()"
+        val code = """
+                    |${generateMeasuredVal()}
+                    |${generateOnCollectionCode()}
+                    |${generateReturn()}
+                    |"""
+            .trimMargin()
 
         methodBuilder.addCode(code)
         classBuilder.addFunction(methodBuilder.build())

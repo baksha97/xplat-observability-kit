@@ -1,41 +1,32 @@
 package monitorable
 
-@Retention(AnnotationRetention.SOURCE)
-annotation class Monitoring
-@Target(AnnotationTarget.FUNCTION)
-@Retention(AnnotationRetention.RUNTIME)
-annotation class MonitorMethod(val name: String)
+object Monitor {
+    @Target(AnnotationTarget.CLASS)
+    @Retention(AnnotationRetention.SOURCE)
+    annotation class Collectable
+    @Target(AnnotationTarget.FUNCTION)
+    @Retention(AnnotationRetention.RUNTIME)
+    annotation class Function(val name: String)
 
-data class MonitorData(
-    val methodName: String,
-    val durationMillis: Long,
-    val successful: Boolean,
-    val exception: Throwable? = null,
-    val metadata: Map<String, Any?> = emptyMap()
-)
+    data class Data(
+        val methodName: String,
+        val durationMillis: Long,
+        val exception: Throwable? = null,
+    )
 
-interface MonitorCollector {
-    fun onCollection(monitorData: MonitorData)
-}
+    fun interface Collector {
+        fun invoke(monitorData: Data)
 
-interface Monitorable <T> {
-    fun monitored(collector: MonitorCollector = LoggingCollector()): T
-}
+        class Printer: Collector {
+            override fun invoke(monitorData: Data) {
+                println(monitorData)
+            }
+        }
 
-
-class CompositeCollector(
-    private val collectors: List<MonitorCollector>
-) : MonitorCollector {
-    constructor(vararg collectors: MonitorCollector) : this(collectors.toList())
-
-    override fun onCollection(monitorData: MonitorData) {
-        collectors.forEach { it.onCollection(monitorData) }
+        class Composite(private vararg var collectors: Collector) : Collector {
+            override fun invoke(monitorData: Data) {
+                collectors.forEach { it.invoke(monitorData) }
+            }
+        }
     }
 }
-
-class LoggingCollector : MonitorCollector {
-    override fun onCollection(monitorData: MonitorData) {
-        println(monitorData)
-    }
-}
-

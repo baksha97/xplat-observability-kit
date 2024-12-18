@@ -1,22 +1,22 @@
 package com.baksha.aop.modern.kotlin
 
-import monitorable.MonitorMethod
-import monitorable.Monitoring
+import monitorable.Monitor
 
-@Monitoring
+@Monitor.Collectable
 interface AuthService {
-    @MonitorMethod(name = "auth_user_get")
+    @Monitor.Function(name = "auth_user_get")
     fun getUser(): String
-    @MonitorMethod(name = "auth_result_get")
+    @Monitor.Function(name = "auth_result_get")
     fun getResult(): Result<String>
 }
 
 fun main() {
     listOf(
         SucceedingAuthServiceImpl()
-            .monitored(),
+                ,
+//            .monitored(),
         FailingAuthServiceImpl()
-            .monitored(),
+//            .monitored(),
     ).forEach { service ->
         runCatching {
             service.getResult()
