@@ -2,6 +2,9 @@ package monitorable
 
 @Retention(AnnotationRetention.SOURCE)
 annotation class Monitoring
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class MonitorMethod(val name: String)
 
 data class MonitorData(
     val methodName: String,

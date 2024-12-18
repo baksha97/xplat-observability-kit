@@ -66,12 +66,6 @@ class MonitorableProcessor(
             it.annotationType.resolve().declaration.qualifiedName?.asString() == "monitorable.Monitorable"
         }
 
-        val config = monitorableAnnotation?.let { extractMonitorConfig(it) }
-            ?: MonitorConfig(
-                captureResult = false,
-                captureExceptions = true
-            )
-
         // Create the proxy class as private
         val classBuilder = TypeSpec.classBuilder(proxyClassName)
             .addModifiers(KModifier.PRIVATE)
@@ -106,7 +100,7 @@ class MonitorableProcessor(
             .getDeclaredFunctions()
             .forEach { function ->
                 if (function.validate()) {
-                    generateMonitoredFunction(function, classBuilder, config)
+                    generateMonitoredFunction(function, classBuilder)
                 }
             }
 
@@ -152,6 +146,7 @@ class MonitorableProcessor(
             .addImport("monitorable", "CompositeCollector")
             .addImport("monitorable", "MonitorCollector")
             .addImport("monitorable", "LoggingCollector")
+            .addImport("kotlin.time", "measureTimedValue")
             .addType(classBuilder.build())
             .addFunction(extensionFun)
             .addFunction(extensionFunVararg)
@@ -168,23 +163,24 @@ class MonitorableProcessor(
         }
     }
 
-    private data class MonitorConfig(
-        val captureResult: Boolean,
-        val captureExceptions: Boolean
-    )
+    private fun extractMethodName(function: KSFunctionDeclaration): String {
+        // Find MonitorMethod annotation if it exists
+        val monitorMethodAnnotation = function.annotations.find {
+            it.annotationType.resolve().declaration.qualifiedName?.asString() == "monitorable.MonitorMethod"
+        }
 
-    private fun extractMonitorConfig(annotation: KSAnnotation): MonitorConfig {
-        return MonitorConfig(
-            captureResult = annotation.arguments.find { it.name?.asString() == "captureResult" }?.value as? Boolean ?: false,
-            captureExceptions = annotation.arguments.find { it.name?.asString() == "captureExceptions" }?.value as? Boolean ?: true
-        )
+        // Extract custom name if annotation is present, otherwise use function name
+        return monitorMethodAnnotation?.arguments?.firstOrNull {
+            it.name?.asString() == "name"
+        }?.value as? String
+            ?: function.simpleName.asString()
     }
 
     private fun generateMonitoredFunction(
         function: KSFunctionDeclaration,
         classBuilder: TypeSpec.Builder,
-        config: MonitorConfig
     ) {
+        val methodName = extractMethodName(function)
         val methodBuilder = FunSpec.builder(function.simpleName.asString())
             .addModifiers(KModifier.OVERRIDE)
 
@@ -201,50 +197,45 @@ class MonitorableProcessor(
 
         val paramNames = function.parameters.joinToString(", ") { it.name?.asString() ?: "_" }
 
+
         val code = buildString {
             if (isResultReturn) {
                 append("""
-                |val startTime = System.currentTimeMillis()
-                |val result = impl.${function.simpleName.asString()}($paramNames)
-                |val duration = System.currentTimeMillis() - startTime
-                |
-                |collector.onCollection(
-                |    MonitorData(
-                |        methodName = "${function.simpleName.asString()}",
-                |        durationMillis = duration,
-                |        successful = result.isSuccess,
-                |        exception = result.exceptionOrNull()
-                |    )
-                |)
-                |
-                |return result
-                |""".trimMargin())
+            |val measured = measureTimedValue { 
+            |    impl.${function.simpleName.asString()}($paramNames)
+            |}
+            |
+            |collector.onCollection(
+            |    MonitorData(
+            |        methodName = "$methodName",
+            |        durationMillis = measured.duration.inWholeMilliseconds,
+            |        successful = measured.value.isSuccess,
+            |        exception = measured.value.exceptionOrNull()
+            |    )
+            |)
+            |
+            |return measured.value
+            |""".trimMargin())
             } else {
                 append("""
-                |val startTime = System.currentTimeMillis()
-                |var success = false
-                |var exception: Throwable? = null
-                |var result: ${returnType?.toTypeName() ?: UNIT}? = null
-                |
-                |try {
-                |    result = impl.${function.simpleName.asString()}($paramNames)
-                |    success = true
-                |    return result
-                |} catch (e: Throwable) {
-                |    exception = e
-                |    throw e
-                |} finally {
-                |    val duration = System.currentTimeMillis() - startTime
-                |    collector.onCollection(
-                |        MonitorData(
-                |            methodName = "${function.simpleName.asString()}",
-                |            durationMillis = duration,
-                |            successful = success,
-                |            exception = ${if (config.captureExceptions) "exception" else "null"}
-                |        )
-                |    )
-                |}
-                |""".trimMargin())
+            |var exception: Throwable? = null
+            |val measured = measureTimedValue { 
+            |    kotlin.runCatching {
+            |        impl.${function.simpleName.asString()}($paramNames)
+            |    }
+            |}
+            |
+            |collector.onCollection(
+            |    MonitorData(
+            |        methodName = "$methodName",
+            |        durationMillis = measured.duration.inWholeMilliseconds,
+            |        successful = measured.value.isSuccess,
+            |        exception = measured.value.exceptionOrNull()
+            |    )
+            |)
+            |
+            |return measured.value.getOrThrow()
+            |""".trimMargin())
             }
         }
 

@@ -1,34 +1,39 @@
 package com.baksha.aop.modern.kotlin
 
+import monitorable.MonitorMethod
 import monitorable.Monitoring
 
 @Monitoring
-interface UserService {
+interface AuthService {
+    @MonitorMethod(name = "auth_user_get")
     fun getUser(): String
+    @MonitorMethod(name = "auth_result_get")
     fun getResult(): Result<String>
 }
 
 fun main() {
     listOf(
-        SucceedingUserServiceImpl()
+        SucceedingAuthServiceImpl()
             .monitored(),
-        FailingUserServiceImpl()
+        FailingAuthServiceImpl()
             .monitored(),
     ).forEach { service ->
-        service.getResult()
-        service.getUser()
+        runCatching {
+            service.getResult()
+            service.getUser()
+        }
         println("===")
     }
 }
 
-class SucceedingUserServiceImpl : UserService {
+class SucceedingAuthServiceImpl : AuthService {
     override fun getUser(): String = "user"
     override fun getResult(): Result<String> = runCatching {
         "user"
     }
 }
 
-class FailingUserServiceImpl : UserService {
+class FailingAuthServiceImpl : AuthService {
     override fun getUser(): String = throw MyException
     override fun getResult(): Result<String> = runCatching {
         throw MyException
