@@ -14,7 +14,7 @@ interface Capturing {
         }
         collector.invoke(
             Monitor.Data(
-                methodName = key,
+                key = key,
                 durationMillis = measured.duration.inWholeMilliseconds,
                 exception = measured.value.exceptionOrNull()
             )
@@ -31,7 +31,7 @@ interface Capturing {
         }
         collector.invoke(
             Monitor.Data(
-                methodName = key,
+                key = key,
                 durationMillis = measured.duration.inWholeMilliseconds,
                 exception = measured.value.exceptionOrNull()
             )

@@ -9,7 +9,7 @@ object Monitor {
     annotation class Function(val name: String)
 
     data class Data(
-        val methodName: String,
+        val key: String,
         val durationMillis: Long,
         val exception: Throwable? = null,
     )
