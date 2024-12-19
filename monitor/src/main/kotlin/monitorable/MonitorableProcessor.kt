@@ -178,7 +178,7 @@ class MonitorableProcessor(
 
         val captureMethod =
             if (isResultReturn) "withResultCapture"
-            else "withCapture"
+            else "withThrowingCapture"
         val code =
             """
             |return $captureMethod("$methodName") {
