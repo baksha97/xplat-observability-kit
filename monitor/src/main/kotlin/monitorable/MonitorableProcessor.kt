@@ -9,11 +9,10 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import java.io.OutputStreamWriter
 
 private const val ANNOTATION_FQN = "monitorable.Monitor.Collectable"
-private const val FUNCTION_ANNOTATION_FQN = "Monitor.Function"
+private const val FUNCTION_ANNOTATION_FQN = "monitorable.Monitor.Function"
 private const val COLLECTOR_SIMPLE_TYPE = "Monitor.Collector"
-private const val DATA_SIMPLE_TYPE = "Monitor.Data"
-private const val DEFAULT_COLLECTOR_SIMPLE_TYPE = "monitorable.Monitor.Collector.Printer"
-private const val COMPOSITE_COLLECTOR_SIMPLE_TYPE = "monitorable.Monitor.Collector.Composite"
+private const val DEFAULT_COLLECTOR_SIMPLE_TYPE = "Monitor.Collectors.Printer"
+private const val COMPOSITE_COLLECTOR_SIMPLE_TYPE = "Monitor.Collectors.Composite"
 
 class MonitorableProcessor(
     private val codeGenerator: CodeGenerator,
@@ -69,17 +68,14 @@ class MonitorableProcessor(
         val interfaceName = declaration.simpleName.asString()
         val proxyClassName = "${interfaceName}MonitoringProxy"
 
-        val monitorableAnnotation = declaration.annotations.find {
-            it.annotationType.resolve().declaration.qualifiedName?.asString() == ANNOTATION_FQN
-        }
-
         // Create the proxy class as private
         val classBuilder = TypeSpec.classBuilder(proxyClassName)
             .addModifiers(KModifier.PRIVATE)
             .addSuperinterface(declaration.asClassName())
+            .addSuperinterface(ClassName("monitorable", "Capturing"))
 
         val constructorBuilder = FunSpec.constructorBuilder()
-            .addParameter("impl", declaration.asClassName())
+            .addParameter("underlying", declaration.asClassName())
             .addParameter(
                 "collector",
                 ClassName("monitorable", COLLECTOR_SIMPLE_TYPE)
@@ -87,8 +83,8 @@ class MonitorableProcessor(
 
         classBuilder.primaryConstructor(constructorBuilder.build())
             .addProperty(
-                PropertySpec.builder("impl", declaration.asClassName())
-                    .initializer("impl")
+                PropertySpec.builder("underlying", declaration.asClassName())
+                    .initializer("underlying")
                     .addModifiers(KModifier.PRIVATE)
                     .build()
             )
@@ -98,7 +94,7 @@ class MonitorableProcessor(
                     ClassName("monitorable", COLLECTOR_SIMPLE_TYPE)
                 )
                     .initializer("collector")
-                    .addModifiers(KModifier.PRIVATE)
+                    .addModifiers(KModifier.OVERRIDE)
                     .build()
             )
 
@@ -111,7 +107,7 @@ class MonitorableProcessor(
                 }
             }
 
-        // Create extension function
+        // Create extension functions
         val extensionFun = FunSpec.builder("monitored")
             .receiver(declaration.asClassName())
             .returns(declaration.asClassName())
@@ -125,11 +121,12 @@ class MonitorableProcessor(
             )
             .addCode("""
                 return ${proxyClassName}(
-                    impl = this,
+                    underlying = this,
                     collector = collector
                 )
             """.trimIndent())
             .build()
+
         val extensionFunVararg = FunSpec.builder("monitored")
             .receiver(declaration.asClassName())
             .returns(declaration.asClassName())
@@ -143,14 +140,15 @@ class MonitorableProcessor(
             )
             .addCode("""
                 return ${proxyClassName}(
-                    impl = this,
+                    underlying = this,
                     collector = $COMPOSITE_COLLECTOR_SIMPLE_TYPE(*collectors)
                 )
             """.trimIndent())
             .build()
+
         val file = FileSpec.builder(packageName, proxyClassName)
             .addImport("monitorable", "Monitor")
-            .addImport("kotlin.time", "measureTimedValue")
+            .addImport("monitorable", "Capturing")
             .addType(classBuilder.build())
             .addFunction(extensionFun)
             .addFunction(extensionFunVararg)
@@ -168,12 +166,10 @@ class MonitorableProcessor(
     }
 
     private fun extractMethodName(function: KSFunctionDeclaration): String {
-        // Find MonitorMethod annotation if it exists
         val monitorMethodAnnotation = function.annotations.find {
             it.annotationType.resolve().declaration.qualifiedName?.asString() == FUNCTION_ANNOTATION_FQN
         }
 
-        // Extract custom name if annotation is present, otherwise use function name
         return monitorMethodAnnotation?.arguments?.firstOrNull {
             it.name?.asString() == "name"
         }?.value as? String
@@ -200,30 +196,17 @@ class MonitorableProcessor(
         returnType?.let { methodBuilder.returns(it.toTypeName()) }
 
         val paramNames = function.parameters.joinToString(", ") { it.name?.asString() ?: "_" }
+        val implCall = "underlying.${function.simpleName.asString()}($paramNames)"
 
-
-
-        fun generateImplCall() = "impl.${function.simpleName.asString()}($paramNames)"
-        fun generateMeasuredVal() =
-            if (isResultReturn) "val measured = measureTimedValue { ${generateImplCall()} }"
-            else "val measured = measureTimedValue { runCatching { ${generateImplCall()} } }"
-        fun generateOnCollectionCode() = """
-            collector.invoke(
-            |    $DATA_SIMPLE_TYPE(
-            |        methodName = "$methodName",
-            |        durationMillis = measured.duration.inWholeMilliseconds,
-            |        exception = measured.value.exceptionOrNull()
-            |    )
-            |)""".trimIndent()
-        fun generateReturn() =
-            if (isResultReturn) "return measured.value"
-            else "return measured.value.getOrThrow()"
-        val code = """
-                    |${generateMeasuredVal()}
-                    |${generateOnCollectionCode()}
-                    |${generateReturn()}
-                    |"""
-            .trimMargin()
+        val captureMethod =
+            if (isResultReturn) "withResultCapture"
+            else "withCapture"
+        val code =
+            """
+            |return $captureMethod("$methodName") {
+            |    $implCall
+            |}
+            """.trimMargin()
 
         methodBuilder.addCode(code)
         classBuilder.addFunction(methodBuilder.build())
@@ -236,32 +219,4 @@ class MonitorableProcessorProvider : SymbolProcessorProvider {
     ): SymbolProcessor {
         return MonitorableProcessor(environment.codeGenerator, environment.logger)
     }
-}
-
-private fun KSClassDeclaration.asClassName(): ClassName {
-    return ClassName(
-        packageName = this.packageName.asString(),
-        simpleNames = this.qualifiedName?.asString()?.split(".")?.drop(
-            this.packageName.asString().split(".").size
-        ) ?: listOf(this.simpleName.asString())
-    )
-}
-
-private fun KSType.toTypeName(): TypeName {
-    val declaration = this.declaration
-    val rawType = when (declaration) {
-        is KSClassDeclaration -> declaration.asClassName()
-        else -> throw IllegalArgumentException("Unexpected declaration: $declaration")
-    }
-
-    if (arguments.isEmpty()) {
-        return rawType.copy(nullable = this.nullability == Nullability.NULLABLE)
-    }
-
-    val typeArguments = arguments.map { it.type?.resolve()?.toTypeName() ?: ANY }
-    return rawType.parameterizedBy(typeArguments).copy(nullable = this.nullability == Nullability.NULLABLE)
-}
-
-private fun KSTypeReference.toTypeName(): TypeName {
-    return this.resolve().toTypeName()
 }

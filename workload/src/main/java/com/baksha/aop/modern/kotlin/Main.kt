@@ -13,10 +13,10 @@ interface AuthService {
 fun main() {
     listOf(
         SucceedingAuthServiceImpl()
-                ,
-//            .monitored(),
+
+            .monitored(),
         FailingAuthServiceImpl()
-//            .monitored(),
+            .monitored(),
     ).forEach { service ->
         runCatching {
             service.getResult()

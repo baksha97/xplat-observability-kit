@@ -15,17 +15,20 @@ object Monitor {
     )
 
     fun interface Collector {
-        fun invoke(monitorData: Data)
+        fun invoke(data: Data)
+    }
 
+    object Collectors {
         class Printer: Collector {
-            override fun invoke(monitorData: Data) {
-                println(monitorData)
+            override fun invoke(data: Data) {
+                println(data)
+                data.exception?.printStackTrace()
             }
         }
 
         class Composite(private vararg var collectors: Collector) : Collector {
-            override fun invoke(monitorData: Data) {
-                collectors.forEach { it.invoke(monitorData) }
+            override fun invoke(data: Data) {
+                collectors.forEach { it.invoke(data) }
             }
         }
     }
