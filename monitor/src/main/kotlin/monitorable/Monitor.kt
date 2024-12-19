@@ -4,6 +4,7 @@ object Monitor {
     @Target(AnnotationTarget.CLASS)
     @Retention(AnnotationRetention.SOURCE)
     annotation class Collectable
+
     @Target(AnnotationTarget.FUNCTION)
     @Retention(AnnotationRetention.RUNTIME)
     annotation class Function(val name: String)
@@ -22,7 +23,6 @@ object Monitor {
         class Printer: Collector {
             override fun invoke(data: Data) {
                 println(data)
-                data.exception?.printStackTrace()
             }
         }
 

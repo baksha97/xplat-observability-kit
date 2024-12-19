@@ -5,7 +5,8 @@ import com.google.devtools.ksp.processing.*
 import com.google.devtools.ksp.symbol.*
 import com.google.devtools.ksp.validate
 import com.squareup.kotlinpoet.*
-import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.ksp.toClassName
+import com.squareup.kotlinpoet.ksp.toTypeName
 import java.io.OutputStreamWriter
 
 private const val ANNOTATION_FQN = "monitorable.Monitor.Collectable"
@@ -18,29 +19,6 @@ class MonitorableProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger
 ) : SymbolProcessor {
-    private fun KSClassDeclaration.asClassName(): ClassName {
-        return ClassName(
-            packageName = this.packageName.asString(),
-            simpleNames = this.qualifiedName?.asString()?.split(".")?.drop(
-                this.packageName.asString().split(".").size
-            ) ?: listOf(this.simpleName.asString())
-        )
-    }
-
-    private fun KSType.toTypeName(): TypeName {
-        val rawType = when (val declaration = this.declaration) {
-            is KSClassDeclaration -> declaration.asClassName()
-            else -> throw IllegalArgumentException("Unexpected declaration: $declaration")
-        }
-
-        if (arguments.isEmpty()) {
-            return rawType.copy(nullable = this.nullability == Nullability.NULLABLE)
-        }
-
-        val typeArguments = arguments.map { it.type?.resolve()?.toTypeName() ?: ANY }
-        return rawType.parameterizedBy(typeArguments).copy(nullable = this.nullability == Nullability.NULLABLE)
-    }
-
     override fun process(resolver: Resolver): List<KSAnnotated> {
         logger.info("MonitorableProcessor running")
 
@@ -71,11 +49,11 @@ class MonitorableProcessor(
         // Create the proxy class as private
         val classBuilder = TypeSpec.classBuilder(proxyClassName)
             .addModifiers(KModifier.PRIVATE)
-            .addSuperinterface(declaration.asClassName())
+            .addSuperinterface(declaration.toClassName())
             .addSuperinterface(ClassName("monitorable", "Capturing"))
 
         val constructorBuilder = FunSpec.constructorBuilder()
-            .addParameter("underlying", declaration.asClassName())
+            .addParameter("underlying", declaration.toClassName())
             .addParameter(
                 "collector",
                 ClassName("monitorable", COLLECTOR_SIMPLE_TYPE)
@@ -83,7 +61,7 @@ class MonitorableProcessor(
 
         classBuilder.primaryConstructor(constructorBuilder.build())
             .addProperty(
-                PropertySpec.builder("underlying", declaration.asClassName())
+                PropertySpec.builder("underlying", declaration.toClassName())
                     .initializer("underlying")
                     .addModifiers(KModifier.PRIVATE)
                     .build()
@@ -109,8 +87,8 @@ class MonitorableProcessor(
 
         // Create extension functions
         val extensionFun = FunSpec.builder("monitored")
-            .receiver(declaration.asClassName())
-            .returns(declaration.asClassName())
+            .receiver(declaration.toClassName())
+            .returns(declaration.toClassName())
             .addParameter(
                 ParameterSpec.builder(
                     "collector",
@@ -128,8 +106,8 @@ class MonitorableProcessor(
             .build()
 
         val extensionFunVararg = FunSpec.builder("monitored")
-            .receiver(declaration.asClassName())
-            .returns(declaration.asClassName())
+            .receiver(declaration.toClassName())
+            .returns(declaration.toClassName())
             .addParameter(
                 ParameterSpec.builder(
                     "collectors",
