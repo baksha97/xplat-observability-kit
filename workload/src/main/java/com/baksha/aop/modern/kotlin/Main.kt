@@ -76,7 +76,7 @@ fun main() {
     // Create service with multiple collectors
     val metricsCollector = MetricsCollector()
     val service = UserServiceImpl()
-//        .monitored(metricsCollector)
+        .monitored(metricsCollector)
         .monitored(Monitor.Collectors.Printer())
 
     // Simulate a series of operations
