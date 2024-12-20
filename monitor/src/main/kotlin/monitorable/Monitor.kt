@@ -64,7 +64,7 @@ object Monitor {
          *
          * @param data The monitoring data to process
          */
-        fun invoke(data: Data)
+        fun collect(data: Data)
     }
 
     /**
@@ -81,7 +81,7 @@ object Monitor {
          * ```
          */
         class Printer: Collector {
-            override fun invoke(data: Data) {
+            override fun collect(data: Data) {
                 println(data)
             }
         }
@@ -101,8 +101,8 @@ object Monitor {
          * ```
          */
         class Composite(private vararg var collectors: Collector) : Collector {
-            override fun invoke(data: Data) {
-                collectors.forEach { it.invoke(data) }
+            override fun collect(data: Data) {
+                collectors.forEach { it.collect(data) }
             }
         }
     }

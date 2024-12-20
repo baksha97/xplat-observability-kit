@@ -8,7 +8,7 @@ class MetricsCollector : Monitor.Collector {
     private val metrics = mutableMapOf<String, MutableList<Long>>()
     private val errors = mutableMapOf<String, MutableList<Throwable>>()
 
-    override fun invoke(data: Monitor.Data) {
+    override fun collect(data: Monitor.Data) {
         metrics.getOrPut(data.key) { mutableListOf() }
             .add(data.durationMillis)
 

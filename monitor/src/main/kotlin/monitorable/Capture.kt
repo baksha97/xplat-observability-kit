@@ -75,7 +75,7 @@ interface Capturing {
         val measured = measureTimedValue {
             closure()
         }
-        collector.invoke(
+        collector.collect(
             Monitor.Data(
                 key = key,
                 durationMillis = measured.duration.inWholeMilliseconds,
