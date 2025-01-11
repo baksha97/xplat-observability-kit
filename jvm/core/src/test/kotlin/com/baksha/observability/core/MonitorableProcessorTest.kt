@@ -1,5 +1,6 @@
 package com.baksha.observability.core
 
+import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 
 /**
@@ -31,6 +32,20 @@ class MonitorableProcessorTest {
     }
 
     @Test
+    fun `test successful suspend operation is monitored`() = runTest {
+        val input = "TestInput"
+        val result = sut.successfulSuspendOperation(input)
+
+        assertEquals(input, result)
+
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("successful_suspend_operation", key)
+            assertNull(exception)
+        }
+    }
+
+    @Test
     fun `test failing operation is monitored`() {
         val exceptionMessage = "Test exception"
         val testException = IllegalStateException(exceptionMessage)
@@ -49,6 +64,24 @@ class MonitorableProcessorTest {
     }
 
     @Test
+    fun `test failing suspend operation is monitored`() = runTest {
+        val exceptionMessage = "Test suspend exception"
+        val testException = IllegalStateException(exceptionMessage)
+
+        val exception = assertFailsWith<IllegalStateException> {
+            sut.failingSuspendOperation(testException)
+        }
+        assertEquals(exceptionMessage, exception.message)
+
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("failingSuspendOperation", key)
+            assertNotNull(exception)
+            assertEquals(exceptionMessage, exception.message)
+        }
+    }
+
+    @Test
     fun `test result succeeding operation is monitored`() {
         val input = "TestResult"
         val result = sut.resultSucceedingOperation(input)
@@ -59,6 +92,21 @@ class MonitorableProcessorTest {
         assertEquals(1, collector.collectedData.size)
         with(collector.collectedData.first()) {
             assertEquals("resultSucceedingOperation", key)
+            assertNull(exception)
+        }
+    }
+
+    @Test
+    fun `test result succeeding suspend operation is monitored`() = runTest {
+        val input = "TestSuspendResult"
+        val result = sut.resultSucceedingSuspendOperation(input)
+
+        assertTrue(result.isSuccess)
+        assertEquals(input, result.getOrThrow())
+
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("resultSucceedingSuspendOperation", key)
             assertNull(exception)
         }
     }
@@ -83,6 +131,27 @@ class MonitorableProcessorTest {
             assertEquals(exceptionMessage, exception.message)
         }
     }
+
+    @Test
+    fun `test result failing suspend operation is monitored`() = runTest {
+        val exceptionMessage = "Result suspend failure"
+        val testException = IllegalArgumentException(exceptionMessage)
+
+        val result = sut.resultFailingSuspendOperation(testException)
+
+        assertTrue(result.isFailure)
+        val exception = assertFailsWith<IllegalArgumentException> {
+            result.getOrThrow()
+        }
+        assertEquals(exceptionMessage, exception.message)
+
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("result_failed_suspend_op", key)
+            assertNotNull(exception)
+            assertEquals(exceptionMessage, exception.message)
+        }
+    }
 }
 
 class TestCollector : Monitor.Collector {
@@ -96,15 +165,27 @@ class TestCollector : Monitor.Collector {
     }
 }
 
-
 @Monitor.Collectable
 interface TestInterface {
     @Monitor.Function("successful_operation")
     fun successfulOperation(input: String): String
+
+    @Monitor.Function("successful_suspend_operation")
+    suspend fun successfulSuspendOperation(input: String): String
+
     fun failingOperation(exception: Exception): String
+
+    suspend fun failingSuspendOperation(exception: Exception): String
+
     fun resultSucceedingOperation(input: String): Result<String>
+
+    suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
+
     @Monitor.Function("result_failed_op")
     fun resultFailingOperation(exception: Exception): Result<String>
+
+    @Monitor.Function("result_failed_suspend_op")
+    suspend fun resultFailingSuspendOperation(exception: Exception): Result<String>
 }
 
 class TestImplementation : TestInterface {
@@ -112,7 +193,15 @@ class TestImplementation : TestInterface {
         return input
     }
 
+    override suspend fun successfulSuspendOperation(input: String): String {
+        return input
+    }
+
     override fun failingOperation(exception: Exception): String {
+        throw exception
+    }
+
+    override suspend fun failingSuspendOperation(exception: Exception): String {
         throw exception
     }
 
@@ -120,7 +209,15 @@ class TestImplementation : TestInterface {
         return Result.success(input)
     }
 
+    override suspend fun resultSucceedingSuspendOperation(input: String): Result<String> {
+        return Result.success(input)
+    }
+
     override fun resultFailingOperation(exception: Exception): Result<String> {
+        return Result.failure(exception)
+    }
+
+    override suspend fun resultFailingSuspendOperation(exception: Exception): Result<String> {
         return Result.failure(exception)
     }
 }

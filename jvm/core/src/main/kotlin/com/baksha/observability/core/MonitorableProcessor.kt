@@ -164,6 +164,11 @@ class MonitorableProcessor(
         val methodBuilder = FunSpec.builder(function.simpleName.asString())
             .addModifiers(KModifier.OVERRIDE)
 
+        // Add suspend modifier if the function is suspending
+        if (function.modifiers.contains(Modifier.SUSPEND)) {
+            methodBuilder.addModifiers(KModifier.SUSPEND)
+        }
+
         function.parameters.forEach { param ->
             methodBuilder.addParameter(
                 param.name?.asString() ?: "_",
@@ -178,9 +183,18 @@ class MonitorableProcessor(
         val paramNames = function.parameters.joinToString(", ") { it.name?.asString() ?: "_" }
         val implCall = "underlying.${function.simpleName.asString()}($paramNames)"
 
-        val captureMethod =
-            if (isResultReturn) "withResultCapture"
-            else "withThrowingCapture"
+        // Choose the appropriate capture method based on whether the function is suspending
+        val captureMethod = when {
+            function.modifiers.contains(Modifier.SUSPEND) -> {
+                if (isResultReturn) "withSuspendResultCapture"
+                else "withSuspendThrowingCapture"
+            }
+            else -> {
+                if (isResultReturn) "withResultCapture"
+                else "withThrowingCapture"
+            }
+        }
+
         val code =
             """
             |return $captureMethod("$methodName") {

@@ -10,6 +10,7 @@ dependencies {
     implementation(libs.kotlin.poet)
 
     kspTest(project(":core"))
-    testImplementation(libs.kotlin.test)
     testImplementation(libs.mockk)
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
