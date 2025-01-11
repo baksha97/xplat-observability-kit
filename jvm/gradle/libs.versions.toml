@@ -1,0 +1,23 @@
+[versions]
+kotlin = "2.0.21"
+jvm = "17"
+ksp = "2.0.21-1.0.26"
+kotlin-poet = "2.0.0"
+mockk = "1.13.11"
+coroutines-test = "1.10.1"
+[libraries]
+kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlin" }
+
+# Annotation Processing
+ksp-symbol-processing-api = { group = "com.google.devtools.ksp", name = "symbol-processing-api", version.ref = "ksp" }
+kotlin-poet = { group = "com.squareup", name = "kotlinpoet-ksp", version.ref = "kotlin-poet" }
+
+# Testing
+kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines-test" }
+
+mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+
+[plugins]
+ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
