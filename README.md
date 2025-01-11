@@ -60,7 +60,7 @@ interface UserService {
 Create custom collectors with a simple functional interface:
 ```kotlin
 class MetricsCollector : Monitor.Collector {
-    override fun invoke(data: Monitor.Data) {
+    override fun collect(data: Monitor.Data) {
         // data.key - monitored method name
         // data.durationMillis - execution time
         // data.exception - any thrown exception
@@ -122,7 +122,7 @@ interface UserService {
 class MetricsCollector : Monitor.Collector {
     private val metrics = mutableMapOf<String, MutableList<Long>>()
     
-    override fun invoke(data: Monitor.Data) {
+    override fun collect(data: Monitor.Data) {
         metrics.getOrPut(data.key) { mutableListOf() }
             .add(data.durationMillis)
     }
