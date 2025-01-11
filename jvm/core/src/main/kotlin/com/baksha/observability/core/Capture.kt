@@ -13,14 +13,20 @@ import kotlin.time.measureTimedValue
  *
  * This generic centralization of utility functions significantly reduces the amount of generated code required for
  * a given proxy.
+ *
+ * We're leveraging an abstract class since interfaces do not allow for inline functions since it's a virtual member.
+ * By using inline functions:
+ * - Avoid having to explicitly deal with suspend functions
+ * - Limit impact on the call stack since it's called in place
  */
-interface Capturing {
+abstract class Capturing(
     /**
      * The collector responsible for handling captured metrics.
      * Implementations will receive timing information and any exceptions that occur
      * during method execution.
      */
     val collector: Monitor.Collector
+) {
 
     /**
      * Executes a throwing operation while capturing its execution metrics.
@@ -32,27 +38,9 @@ interface Capturing {
      * @param E The type of value returned by the operation
      * @throws Throwable if the closure throws an exception
      */
-    fun <E> withThrowingCapture(
+    inline fun <E> withThrowingCapture(
         key: String,
         closure: () -> E
-    ): E =
-        capture(key) { runCatching { closure() } }
-            .value
-            .getOrThrow()
-
-    /**
-     * Executes a suspending throwing operation while capturing its execution metrics.
-     * If the operation throws an exception, it will be captured and then rethrown.
-     *
-     * @param key A string identifier for the operation being monitored
-     * @param closure The suspending operation to execute and monitor
-     * @return The result of the operation
-     * @param E The type of value returned by the operation
-     * @throws Throwable if the closure throws an exception
-     */
-    suspend fun <E> withSuspendThrowingCapture(
-        key: String,
-        closure: suspend () -> E
     ): E =
         capture(key) { runCatching { closure() } }
             .value
@@ -68,26 +56,9 @@ interface Capturing {
      * @return The [Result] returned by the operation
      * @param E The type of value wrapped in the [Result]
      */
-    fun <E> withResultCapture(
+    inline fun <E> withResultCapture(
         key: String,
         closure: () -> Result<E>
-    ): Result<E> =
-        capture(key) { closure() }
-            .value
-
-    /**
-     * Executes a suspending operation that returns a [Result] while capturing its execution metrics.
-     * This method is particularly useful for suspending operations that already handle their own exceptions
-     * using Kotlin's [Result] type.
-     *
-     * @param key A string identifier for the operation being monitored
-     * @param closure The suspending operation to execute and monitor, which returns a [Result]
-     * @return The [Result] returned by the operation
-     * @param E The type of value wrapped in the [Result]
-     */
-    suspend fun <E> withSuspendResultCapture(
-        key: String,
-        closure: suspend () -> Result<E>
     ): Result<E> =
         capture(key) { closure() }
             .value
@@ -102,7 +73,7 @@ interface Capturing {
      * @return A [TimedValue] containing both the result and execution duration
      * @param T The type of value wrapped in the [Result] returned by the closure
      */
-    private inline fun <T> capture(
+    inline fun <T> capture(
         key: String,
         closure: () -> Result<T>
     ): TimedValue<Result<T>> {

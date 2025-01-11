@@ -48,37 +48,35 @@ class MonitorableProcessor(
         val interfaceName = declaration.simpleName.asString()
         val proxyClassName = "${interfaceName}MonitoringProxy"
 
-        // Create the proxy class as private
+        // Create the proxy class as private with superclass constructor call
         val classBuilder = TypeSpec.classBuilder(proxyClassName)
             .addModifiers(KModifier.PRIVATE)
             .addSuperinterface(declaration.toClassName())
-            .addSuperinterface(ClassName(PACKAGE, "Capturing"))
+            .superclass(ClassName(PACKAGE, "Capturing"))
 
+        // Create constructor that directly calls super constructor with collector
         val constructorBuilder = FunSpec.constructorBuilder()
-            .addParameter("underlying", declaration.toClassName())
             .addParameter(
-                "collector",
-                ClassName(PACKAGE, COLLECTOR_SIMPLE_TYPE)
+                ParameterSpec.builder("underlying", declaration.toClassName())
+                    .build()
+            )
+            .addParameter(
+                ParameterSpec.builder("collector", ClassName(PACKAGE, COLLECTOR_SIMPLE_TYPE))
+                    .build()
             )
 
-        classBuilder.primaryConstructor(constructorBuilder.build())
+        // Create the class with the constructor parameters
+        classBuilder
+            .primaryConstructor(constructorBuilder.build())
+            .addSuperclassConstructorParameter("collector")
             .addProperty(
                 PropertySpec.builder("underlying", declaration.toClassName())
                     .initializer("underlying")
                     .addModifiers(KModifier.PRIVATE)
                     .build()
             )
-            .addProperty(
-                PropertySpec.builder(
-                    "collector",
-                    ClassName(PACKAGE, COLLECTOR_SIMPLE_TYPE)
-                )
-                    .initializer("collector")
-                    .addModifiers(KModifier.OVERRIDE)
-                    .build()
-            )
 
-        // Generate monitored functions
+        // Rest of the processInterface function remains the same...
         declaration
             .getDeclaredFunctions()
             .forEach { function ->
@@ -87,7 +85,6 @@ class MonitorableProcessor(
                 }
             }
 
-        // Create extension functions
         val extensionFun = FunSpec.builder("monitored")
             .receiver(declaration.toClassName())
             .returns(declaration.toClassName())
@@ -100,11 +97,11 @@ class MonitorableProcessor(
                     .build()
             )
             .addCode("""
-                return ${proxyClassName}(
-                    underlying = this,
-                    collector = collector
-                )
-            """.trimIndent())
+            return ${proxyClassName}(
+                underlying = this,
+                collector = collector
+            )
+        """.trimIndent())
             .build()
 
         val extensionFunVararg = FunSpec.builder("monitored")
@@ -119,11 +116,11 @@ class MonitorableProcessor(
                     .build()
             )
             .addCode("""
-                return ${proxyClassName}(
-                    underlying = this,
-                    collector = $COMPOSITE_COLLECTOR_SIMPLE_TYPE(*collectors)
-                )
-            """.trimIndent())
+            return ${proxyClassName}(
+                underlying = this,
+                collector = $COMPOSITE_COLLECTOR_SIMPLE_TYPE(*collectors)
+            )
+        """.trimIndent())
             .build()
 
         val file = FileSpec.builder(packageName, proxyClassName)
@@ -144,7 +141,6 @@ class MonitorableProcessor(
             }
         }
     }
-
     private fun extractMethodName(function: KSFunctionDeclaration): String {
         val monitorMethodAnnotation = function.annotations.find {
             it.annotationType.resolve().declaration.qualifiedName?.asString() == FUNCTION_ANNOTATION_FQN
@@ -183,17 +179,10 @@ class MonitorableProcessor(
         val paramNames = function.parameters.joinToString(", ") { it.name?.asString() ?: "_" }
         val implCall = "underlying.${function.simpleName.asString()}($paramNames)"
 
-        // Choose the appropriate capture method based on whether the function is suspending
-        val captureMethod = when {
-            function.modifiers.contains(Modifier.SUSPEND) -> {
-                if (isResultReturn) "withSuspendResultCapture"
-                else "withSuspendThrowingCapture"
-            }
-            else -> {
-                if (isResultReturn) "withResultCapture"
-                else "withThrowingCapture"
-            }
-        }
+
+        val captureMethod =
+            if (isResultReturn) "withResultCapture"
+            else "withThrowingCapture"
 
         val code =
             """
