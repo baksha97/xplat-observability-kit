@@ -54,7 +54,7 @@ interface Capturing {
         key: String,
         closure: suspend () -> E
     ): E =
-        suspendCapture(key) { runCatching { closure() } }
+        capture(key) { runCatching { closure() } }
             .value
             .getOrThrow()
 
@@ -89,7 +89,7 @@ interface Capturing {
         key: String,
         closure: suspend () -> Result<E>
     ): Result<E> =
-        suspendCapture(key) { closure() }
+        capture(key) { closure() }
             .value
 
     /**
@@ -102,36 +102,9 @@ interface Capturing {
      * @return A [TimedValue] containing both the result and execution duration
      * @param T The type of value wrapped in the [Result] returned by the closure
      */
-    private fun <T> capture(
+    private inline fun <T> capture(
         key: String,
         closure: () -> Result<T>
-    ): TimedValue<Result<T>> {
-        val measured = measureTimedValue {
-            closure()
-        }
-        collector.collect(
-            Monitor.Data(
-                key = key,
-                durationMillis = measured.duration.inWholeMilliseconds,
-                exception = measured.value.exceptionOrNull()
-            )
-        )
-        return measured
-    }
-
-    /**
-     * Internal helper function that performs the actual metric capture for suspending operations.
-     * This function measures the execution time of the provided suspending closure and
-     * delegates the captured metrics to the collector.
-     *
-     * @param key A string identifier for the operation being monitored
-     * @param closure The suspending operation to execute and monitor
-     * @return A [TimedValue] containing both the result and execution duration
-     * @param T The type of value wrapped in the [Result] returned by the closure
-     */
-    private suspend fun <T> suspendCapture(
-        key: String,
-        closure: suspend () -> Result<T>
     ): TimedValue<Result<T>> {
         val measured = measureTimedValue {
             closure()
