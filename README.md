@@ -158,6 +158,72 @@ fun main() {
 - **Simplicity**: Minimal API surface with maximum utility
 - **Performance**: Negligible runtime overhead
 
+## Capture Mechanism
+
+### Performance-Optimized Design
+
+A key architectural feature of Monitorable is its use of inline functions via an abstract class for capturing method metrics, rather than using interface-based virtual dispatch:
+
+```kotlin
+abstract class Capturing(val collector: Monitor.Collector) {
+    /**
+     * Internal helper function that performs the actual metric capture.
+     * This function measures the execution time of the provided closure and
+     * delegates the captured metrics to the collector.
+     *
+     * @param key A string identifier for the operation being monitored
+     * @param closure The operation to execute and monitor
+     * @return A [TimedValue] containing both the result and execution duration
+     * @param T The type of value wrapped in the [Result] returned by the closure
+     */
+    inline fun <T> capture(
+        key: String,
+        closure: () -> Result<T>
+    ): TimedValue<Result<T>> {
+        val measured = measureTimedValue {
+            closure()
+        }
+        collector.collect(
+            Monitor.Data(
+                key = key,
+                durationMillis = measured.duration.inWholeMilliseconds,
+                exception = measured.value.exceptionOrNull()
+            )
+        )
+        return measured
+    }
+}
+```
+
+This design provides several critical performance benefits:
+
+1. **Zero Virtual Dispatch**: Using inline functions eliminates virtual method call overhead that would occur with an interface-based approach
+
+2. **Optimized Stack Traces**: Function inlining reduces stack trace complexity and improves exception handling performance
+
+3. **Efficient Coroutine Support**: Inline functions allow the compiler to optimize suspend function handling without additional state machine overhead
+
+4. **JVM Optimization**: The abstract class design enables better JVM inlining and escape analysis optimizations
+
+The generated monitoring code leverages these optimizations to provide essentially zero-overhead method monitoring. When combined with compile-time code generation, this results in monitoring capabilities with negligible runtime impact.
+
+### Capturing Process
+
+The monitoring process follows these steps:
+
+1. KSP generates a proxy class that extends your service interface
+2. Each monitored method is wrapped with capture functions
+3. Method execution is timed using Kotlin's `measureTimedValue`
+4. Any exceptions are automatically caught and recorded
+5. Timing and error data is passed to the collector(s)
+6. The original result (or exception) is returned to the caller
+
+This process happens with minimal overhead due to:
+- Compile-time code generation (no reflection)
+- Inlined capture functions (no virtual dispatch)
+- Efficient exception handling
+- Zero-copy metric collection
+
 ## License
 
 TBD

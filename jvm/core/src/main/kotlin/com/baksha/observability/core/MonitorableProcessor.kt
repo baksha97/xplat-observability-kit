@@ -96,12 +96,14 @@ class MonitorableProcessor(
                     .defaultValue("$DEFAULT_COLLECTOR_SIMPLE_TYPE()")
                     .build()
             )
-            .addCode("""
+            .addCode(
+                """
             return ${proxyClassName}(
                 underlying = this,
                 collector = collector
             )
-        """.trimIndent())
+        """.trimIndent()
+            )
             .build()
 
         val extensionFunVararg = FunSpec.builder("monitored")
@@ -115,12 +117,14 @@ class MonitorableProcessor(
                     .addModifiers(KModifier.VARARG)
                     .build()
             )
-            .addCode("""
+            .addCode(
+                """
             return ${proxyClassName}(
                 underlying = this,
                 collector = $COMPOSITE_COLLECTOR_SIMPLE_TYPE(*collectors)
             )
-        """.trimIndent())
+        """.trimIndent()
+            )
             .build()
 
         val file = FileSpec.builder(packageName, proxyClassName)
@@ -141,6 +145,7 @@ class MonitorableProcessor(
             }
         }
     }
+
     private fun extractMethodName(function: KSFunctionDeclaration): String {
         val monitorMethodAnnotation = function.annotations.find {
             it.annotationType.resolve().declaration.qualifiedName?.asString() == FUNCTION_ANNOTATION_FQN
