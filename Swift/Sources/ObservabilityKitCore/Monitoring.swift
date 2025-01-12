@@ -1,105 +1,120 @@
 import Foundation
+import Dependencies
+import DependenciesMacros
 
-public enum Monitor {
-  /// Data structure representing a monitoring event
-  public struct Data {
-    public let key: String
-    public let durationMillis: Int64
-    public let error: Error?
-    
-    public init(key: String, durationMillis: Int64, error: Error? = nil) {
-      self.key = key
-      self.durationMillis = durationMillis
-      self.error = error
+
+@DependencyClient
+public struct CollectorClient : Sendable {
+  public var collect: @Sendable (CaptureData) -> Void
+}
+
+extension CollectorClient: DependencyKey {
+  public static let liveValue = Self(
+    collect: { data in
+      print("Live Collector:")
+      print("Method: \(data.key)")
+      print("Duration: \(String(format: "%.2f", data.duration))ms")
+      if let error = data.error {
+        print("Error: \(error)")
+      }
     }
-  }
+  )
   
-  /// Protocol for collecting monitoring data
-  public protocol Collector {
-    func collect(_ data: Data)
-  }
-  
-  /// Built-in collectors
-  public enum Collectors {
-    public class Printer: Collector {
-      public init() {}
-      
-      public func collect(_ data: Data) {
-        print(data)
-      }
-    }
-    
-    public class Composite: Collector {
-      private let collectors: [Collector]
-      
-      public init(_ collectors: Collector...) {
-        self.collectors = collectors
-      }
-      
-      public func collect(_ data: Data) {
-        collectors.forEach { $0.collect(data) }
-      }
-    }
+  public static let testValue = Self(
+    collect: { _ in }  // No-op collector for testing
+  )
+}
+
+public extension DependencyValues {
+  var collector: CollectorClient {
+    get { self[CollectorClient.self] }
+    set { self[CollectorClient.self] = newValue }
   }
 }
 
-// Protocol for capturing method execution metrics
+public struct CaptureData: Sendable {
+  public typealias Duration = CFAbsoluteTime
+  public let key: String
+  public let duration: Duration
+  public let error: Error?
+}
+public struct Measurment<T> {
+  public let result: Result<T, Error>
+  public let duration: CaptureData.Duration
+}
+
+public extension Measurment {
+  var error: Error? {
+    if case let Result.failure(error) = result {
+      error
+    } else {
+      nil
+    }
+  }
+}
 public protocol Capturing {
-  var collector: Monitor.Collector { get }
-  
-  func withThrowingCapture<T>(key: String, operation: () throws -> T) rethrows -> T
-  func withResultCapture<T>(key: String, operation: () -> Result<T, Error>) -> Result<T, Error>
+  func withCapture<T>(_ key: String, _ operation: () -> T) -> T
+  func withCapture<T>(_ key: String, _ operation: () async -> T) async -> T
+  func withThrowingCapture<T>(_ key: String, _ operation: () throws -> T) throws -> T
+  func withThrowingCapture<T>(_ key: String, _ operation: () async throws -> T) async throws -> T
 }
 
-// Default implementation
 public extension Capturing {
-  func withThrowingCapture<T>(key: String, operation: () throws -> T) rethrows -> T {
-    let start = DispatchTime.now()
-    do {
-      let result = try operation()
-      let end = DispatchTime.now()
-      let duration = end.uptimeNanoseconds - start.uptimeNanoseconds
-      collector.collect(Monitor.Data(key: key, durationMillis: Int64(duration / 1_000_000)))
-      return result
-    } catch {
-      let end = DispatchTime.now()
-      let duration = end.uptimeNanoseconds - start.uptimeNanoseconds
-      collector.collect(Monitor.Data(key: key, durationMillis: Int64(duration / 1_000_000), error: error))
-      throw error
-    }
+  
+  func withCapture<T>(_ key: String, _ operation: () async -> T) async -> T {
+    // The underlying operation can never fail, so we can ignore the compiler warning.
+    try! await withThrowingCapture(key, operation)
   }
   
-  func withResultCapture<T, E>(key: String, operation: () -> Result<T, E>) -> Result<T, E> {
-    let start = DispatchTime.now()
-    let result = operation()
-    let end = DispatchTime.now()
-    let duration = end.uptimeNanoseconds - start.uptimeNanoseconds
-    
-    switch result {
-    case .success:
-      collector.collect(Monitor.Data(key: key, durationMillis: Int64(duration / 1_000_000)))
-    case .failure(let error):
-      collector.collect(Monitor.Data(key: key, durationMillis: Int64(duration / 1_000_000), error: error))
-    }
-    
-    return result
+  func withCapture<T>(_ key: String, _ operation: () -> T) -> T {
+    // The underlying operation can never fail, so we can ignore the compiler warning.
+    try! withThrowingCapture(key, operation)
   }
-}
-
-// Example Macro Input
-public protocol Service {
-  func sample() throws -> String
-}
-
-
-// Example Macro Ouput
-
-public struct ServiceProxy: Service, Capturing {
-  public let collector: any Monitor.Collector
-  public let underlying: Service
-  public let clock: any Clock
   
-  public func sample() throws -> String {
-    try underlying.sample()
+  func withThrowingCapture<T>(_ key: String, _ operation: () async throws -> T) async throws -> T {
+    let measured = await measure(operation)
+    dispatch(
+      CaptureData(
+        key: key,
+        duration: measured.duration,
+        error: measured.error
+      )
+    )
+    return try measured.result.get()
+  }
+  
+  func withThrowingCapture<T>(_ key: String, _ operation: () throws -> T) throws -> T {
+    let measured = measure(operation)
+    dispatch(
+      CaptureData(
+        key: key,
+        duration: measured.duration,
+        error: measured.error
+      )
+    )
+    return try measured.result.get()
+  }
+  
+  fileprivate func measure<T>(
+    _ operation: () async throws -> T
+  ) async -> Measurment<T> {
+    let start = CFAbsoluteTimeGetCurrent()
+    let result = await Result { try await operation() }
+    let end = CFAbsoluteTimeGetCurrent()
+    return Measurment(result: result, duration: start - end)
+  }
+  
+  fileprivate func measure<T>(
+    _ operation: () throws -> T
+  ) -> Measurment<T> {
+    let start = CFAbsoluteTimeGetCurrent()
+    let result = Result { try operation() }
+    let end = CFAbsoluteTimeGetCurrent()
+    return Measurment(result: result, duration: start - end)
+  }
+  
+  fileprivate func dispatch(_ capture: CaptureData) {
+    @Dependency(CollectorClient.self) var client
+    client.collect(capture)
   }
 }

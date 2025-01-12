@@ -1,127 +1,48 @@
-import Foundation
+import ObservabilityKitCore
 import Dependencies
-import DependenciesMacros
 
-
-@DependencyClient
-struct CollectorClient {
-  var collect: @Sendable (CaptureData) -> Void
-}
-
-extension CollectorClient: DependencyKey {
-  static let liveValue = Self(
-    collect: { data in
-      print("Live Collector:")
-      print("Method: \(data.key)")
-      print("Duration: \(String(format: "%.2f", data.durationMillis))ms")
-      if let error = data.exception {
-        print("Exception: \(error)")
-      }
-    }
-  )
+struct SampleError: Error {}
+struct Sample: Capturing {
   
-  static let testValue = Self(
-    collect: { _ in }  // No-op collector for testing
-  )
-}
-
-extension DependencyValues {
-  var collector: CollectorClient {
-    get { self[CollectorClient.self] }
-    set { self[CollectorClient.self] = newValue }
+  func nonThrowingSync() {
+    withCapture("nonThrowingSync") {
+      print("nonThrowingSync: in capture")
+    }
   }
-}
-
-struct CaptureData: Sendable {
-  let key: String
-  let durationMillis: Double
-  let error: Error?
-}
-struct Measurment<T> {
-  let result: Result<T, Error>
-  let duration: CFAbsoluteTime
-}
-
-extension Measurment {
-  var error: Error? {
-    if case let Result.failure(error) = result {
-      error
-    } else {
-      nil
+  
+  func syncThrowWithoutThrow() throws {
+    try withThrowingCapture("syncThrowWithoutThrow") {
+      print("syncThrowWithoutThrow: in capture")
+      print("in capture")
+    }
+  }
+  
+  func syncThrowWithThrow() throws {
+    try withThrowingCapture("syncThrowWithThrow") {
+      print("syncThrowWithThrow: in capture")
+      throw SampleError()
+    }
+  }
+  
+  func asyncThrowWithoutThrow() async throws {
+    try await withThrowingCapture("asyncThrowWithoutThrow") {
+      print("asyncThrowWithoutThrow: in capture")
+    }
+  }
+  
+  func asyncThrowWithThrow() async throws {
+    try await withThrowingCapture("asyncThrowWithThrow") {
+      throw SampleError()
     }
   }
 }
-protocol Capturing {
-  func capture<T>(_ key: String, _ operation: () throws -> T) rethrows -> T
-  func capture<T>(_ key: String, _ operation: () async throws -> T) async rethrows -> T
-}
 
-extension Capturing {
-  // Call can throw, but the error is not handled; a function declared 'rethrows' may only throw if its parameter does
-  func capture<T>(_ key: String, _ operation: () async throws -> T) async rethrows -> T {
-    let measured = await measure(operation)
-    dispatch(
-      CaptureData(
-        key: key,
-        durationMillis: measured.duration,
-        error: measured.error
-      )
-    )
-    return try measured.result.get()
-  }
-  
-  private func measure<T>(
-    _ operation: () async throws -> T
-  ) async -> Measurment<T> {
-    let start = CFAbsoluteTimeGetCurrent()
-    let result = await Result { try await operation() }
-    let end = CFAbsoluteTimeGetCurrent()
-    return Measurment(result: result, duration: start - end)
-  }
-  
-  private func measure<T>(
-    _ operation: () throws -> T
-  ) -> (Result<T, Error>, CFAbsoluteTime) {
-    let start = CFAbsoluteTimeGetCurrent()
-    let result = Result { try operation() }
-    let end = CFAbsoluteTimeGetCurrent()
-    return (result, start - end)
-  }
-  
-  private func dispatch(_ capture: CaptureData) {
-    @Dependency(CollectorClient.self) var client
-    client.collect(capture)
-  }
-}
+let sample = Sample()
 
-//struct Sample: Capturing {
-//  
-//  func sample() throws {
-//    try capture("sample") {
-//      print("in capture")
-//      // Uncomment to test error handling:
-//      // throw NSError(domain: "TestError", code: -1, userInfo: nil)
-//    }
-//  }
-//}
-//
-//// Example of testing setup:
-//let testingCollector = CollectorClient(
-//  collect: { data in
-//    // Verify the captured data in tests
-//    print("Test collector received:", data)
-//  }
-//)
-//
-//let testingSample = Sample()
-////try testingSample.sample()
-//
-//func test() {
-//  @Dependency(\.continuousClock) var clock
-//  var duration = clock.measure {
-//    print("measuring")
-//  }
-//  print(duration)
-//}
-//
-//test()
+sample.nonThrowingSync()
+try sample.syncThrowWithoutThrow()
+try await sample.asyncThrowWithoutThrow()
+
+//try sample.syncThrowWithThrow()
+//try await sample.asyncThrowWithThrow()
+
