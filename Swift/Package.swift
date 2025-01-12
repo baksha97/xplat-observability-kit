@@ -6,24 +6,29 @@ import CompilerPluginSupport
 
 let package = Package(
   name: "ObservabilityKit",
-  platforms: [.macOS(.v10_15), .iOS(.v13), .tvOS(.v13), .watchOS(.v6), .macCatalyst(.v13)],
+  platforms: [.macOS(.v13), .iOS(.v13), .tvOS(.v13), .watchOS(.v6), .macCatalyst(.v13)],
   products: [
     .library(
       name: "ObservabilityKit",
       targets: ["ObservabilityKitCore"]
     ),
     .executable(
-        name: "ObservabilityKitClient",
-        targets: ["ObservabilityKitClient"]
+      name: "ObservabilityKitClient",
+      targets: ["ObservabilityKitClient"]
     ),
   ],
   dependencies: [
     .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0-latest"),
+    .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.6.3")
   ],
   targets: [
     .target(
       name: "ObservabilityKitCore",
-      dependencies: ["ObservabilityKitMacros"]
+      dependencies: [
+        "ObservabilityKitMacros",
+        .product(name: "Dependencies", package: "swift-dependencies"),
+        .product(name: "DependenciesMacros", package: "swift-dependencies")
+      ]
     ),
     .macro(
       name: "ObservabilityKitMacros",
@@ -36,7 +41,12 @@ let package = Package(
     .executableTarget(name: "ObservabilityKitClient", dependencies: ["ObservabilityKitCore"]),
     .testTarget(
       name: "ObservabilityKitCoreTests",
-      dependencies: ["ObservabilityKitCore"]
+      dependencies: [
+        "ObservabilityKitCore",
+        
+        .product(name: "Dependencies", package: "swift-dependencies"),
+        .product(name: "DependenciesMacros", package: "swift-dependencies")
+      ]
     ),
   ]
 )

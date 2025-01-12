@@ -1,70 +1,127 @@
-// Sources/ObservabilityKitClient/main.swift
+import Foundation
+import Dependencies
+import DependenciesMacros
 
-import ObservabilityKitCore
 
-@Monitored
-protocol UserService {
-  func getUser(id: String) throws -> User
-  func createUser(_ user: User) throws -> User
+@DependencyClient
+struct CollectorClient {
+  var collect: @Sendable (CaptureData) -> Void
 }
-//
-//struct UserServiceProxy: UserService, Capturing {
-//  let underlying: UserService
-//  let collector: any Monitor.Collector
-//  init(underlying: UserService, collector: any Monitor.Collector) {
-//    self.underlying = underlying
-//    self.collector = collector
-//  }
+
+extension CollectorClient: DependencyKey {
+  static let liveValue = Self(
+    collect: { data in
+      print("Live Collector:")
+      print("Method: \(data.key)")
+      print("Duration: \(String(format: "%.2f", data.durationMillis))ms")
+      if let error = data.exception {
+        print("Exception: \(error)")
+      }
+    }
+  )
+  
+  static let testValue = Self(
+    collect: { _ in }  // No-op collector for testing
+  )
+}
+
+extension DependencyValues {
+  var collector: CollectorClient {
+    get { self[CollectorClient.self] }
+    set { self[CollectorClient.self] = newValue }
+  }
+}
+
+struct CaptureData: Sendable {
+  let key: String
+  let durationMillis: Double
+  let error: Error?
+}
+struct Measurment<T> {
+  let result: Result<T, Error>
+  let duration: CFAbsoluteTime
+}
+
+extension Measurment {
+  var error: Error? {
+    if case let Result.failure(error) = result {
+      error
+    } else {
+      nil
+    }
+  }
+}
+protocol Capturing {
+  func capture<T>(_ key: String, _ operation: () throws -> T) rethrows -> T
+  func capture<T>(_ key: String, _ operation: () async throws -> T) async rethrows -> T
+}
+
+extension Capturing {
+  // Call can throw, but the error is not handled; a function declared 'rethrows' may only throw if its parameter does
+  func capture<T>(_ key: String, _ operation: () async throws -> T) async rethrows -> T {
+    let measured = await measure(operation)
+    dispatch(
+      CaptureData(
+        key: key,
+        durationMillis: measured.duration,
+        error: measured.error
+      )
+    )
+    return try measured.result.get()
+  }
+  
+  private func measure<T>(
+    _ operation: () async throws -> T
+  ) async -> Measurment<T> {
+    let start = CFAbsoluteTimeGetCurrent()
+    let result = await Result { try await operation() }
+    let end = CFAbsoluteTimeGetCurrent()
+    return Measurment(result: result, duration: start - end)
+  }
+  
+  private func measure<T>(
+    _ operation: () throws -> T
+  ) -> (Result<T, Error>, CFAbsoluteTime) {
+    let start = CFAbsoluteTimeGetCurrent()
+    let result = Result { try operation() }
+    let end = CFAbsoluteTimeGetCurrent()
+    return (result, start - end)
+  }
+  
+  private func dispatch(_ capture: CaptureData) {
+    @Dependency(CollectorClient.self) var client
+    client.collect(capture)
+  }
+}
+
+//struct Sample: Capturing {
 //  
-//  func getUser(id: String) throws -> User {
-//    try withThrowingCapture(key: "getUser") {
-//      try underlying.getUser(id: id)
-//    }
-//  }
-//  
-//  func createUser(_ user: User) throws -> User {
-//    try withThrowingCapture(key: "createUser") {
-//      try underlying.createUser(user)
+//  func sample() throws {
+//    try capture("sample") {
+//      print("in capture")
+//      // Uncomment to test error handling:
+//      // throw NSError(domain: "TestError", code: -1, userInfo: nil)
 //    }
 //  }
 //}
 //
-//extension UserService {
-//  func monitored(collector: any Monitor.Collector) -> UserService {
-//    UserServiceProxy(underlying: self, collector: collector)
+//// Example of testing setup:
+//let testingCollector = CollectorClient(
+//  collect: { data in
+//    // Verify the captured data in tests
+//    print("Test collector received:", data)
 //  }
+//)
+//
+//let testingSample = Sample()
+////try testingSample.sample()
+//
+//func test() {
+//  @Dependency(\.continuousClock) var clock
+//  var duration = clock.measure {
+//    print("measuring")
+//  }
+//  print(duration)
 //}
-
-struct User {
-  let id: String
-  let name: String
-}
-
-// Example implementation
-class UserServiceImpl: UserService {
-  func monitored(collectors: any ObservabilityKitCore.Monitor.Collector...) -> Self {
-    fatalError()
-  }
-  
-  func getUser(id: String) throws -> User {
-    return User(id: id, name: "John Doe")
-  }
-  
-  func createUser(_ user: User) throws -> User {
-    return user
-  }
-}
-
-// Usage
-let service = UserServiceImpl()
-let monitoredService = service.monitored()
-
-do {
-  let user = try monitoredService.getUser(id: "123")
-  print("Got user: \(user)")
-  
-  let newUser = try monitoredService.createUser(User(id: "456", name: "Jane Doe"))
-  print("Created user: \(newUser)")
-} catch {
-  print("Error: \(error)")
-}
+//
+//test()

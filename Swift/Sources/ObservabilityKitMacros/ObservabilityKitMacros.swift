@@ -24,10 +24,10 @@ public struct StringifyMacro: ExpressionMacro {
         return "(\(argument), \(literal: argument.description))"
     }
 }
-//
-//@main
-//struct ObservabilityKitMacros: CompilerPlugin {
-//    let providingMacros: [Macro.Type] = [
-//        StringifyMacro.self,
-//    ]
-//}
+
+@main
+struct ObservabilityKitMacros: CompilerPlugin {
+    let providingMacros: [Macro.Type] = [
+        StringifyMacro.self
+    ]
+}

@@ -85,3 +85,21 @@ public extension Capturing {
     return result
   }
 }
+
+// Example Macro Input
+public protocol Service {
+  func sample() throws -> String
+}
+
+
+// Example Macro Ouput
+
+public struct ServiceProxy: Service, Capturing {
+  public let collector: any Monitor.Collector
+  public let underlying: Service
+  public let clock: any Clock
+  
+  public func sample() throws -> String {
+    try underlying.sample()
+  }
+}
