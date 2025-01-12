@@ -19,15 +19,14 @@ let package = Package(
   ],
   dependencies: [
     .package(url: "https://github.com/swiftlang/swift-syntax.git", from: "600.0.0-latest"),
-    .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.6.3")
+    .package(url: "https://github.com/apple/swift-distributed-tracing", from: "1.1.2")
   ],
   targets: [
     .target(
       name: "ObservabilityKitCore",
       dependencies: [
         "ObservabilityKitMacros",
-        .product(name: "Dependencies", package: "swift-dependencies"),
-        .product(name: "DependenciesMacros", package: "swift-dependencies")
+        .product(name: "Tracing", package: "swift-distributed-tracing"),
       ]
     ),
     .macro(
@@ -42,10 +41,7 @@ let package = Package(
     .testTarget(
       name: "ObservabilityKitCoreTests",
       dependencies: [
-        "ObservabilityKitCore",
-        
-        .product(name: "Dependencies", package: "swift-dependencies"),
-        .product(name: "DependenciesMacros", package: "swift-dependencies")
+        "ObservabilityKitCore"
       ]
     ),
   ]

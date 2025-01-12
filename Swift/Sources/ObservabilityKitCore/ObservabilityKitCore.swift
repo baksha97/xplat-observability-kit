@@ -10,12 +10,3 @@
 @freestanding(expression)
 public macro stringify<T>(_ value: T) -> (T, String) = #externalMacro(module: "ObservabilityKitMacros", type: "StringifyMacro")
 
-
-@attached(member, names: arbitrary)
-@attached(extension, names: arbitrary)
-public macro Monitored() = #externalMacro(module: "ObservabilityKitMacros", type: "MonitoredMacro")
-
-/// Macro that generates a wrapper struct for a protocol
-@attached(member, names: named(_WrappedImpl))
-@attached(extension, names: named(wrapped))
-public macro WrapProtocol() = #externalMacro(module: "ObservabilityKitMacros", type: "WrapProtocolMacro")
