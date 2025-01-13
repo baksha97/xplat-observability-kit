@@ -11,11 +11,14 @@
 public macro stringify<T>(_ value: T) -> (T, String) = #externalMacro(module: "ObservabilityKitMacros", type: "StringifyMacro")
 
 
-@attached(member, names: arbitrary)
-@attached(extension, names: arbitrary)
-public macro Monitored() = #externalMacro(module: "ObservabilityKitMacros", type: "MonitoredMacro")
 
-/// Macro that generates a wrapper struct for a protocol
-@attached(member, names: named(_WrappedImpl))
-@attached(extension, names: named(wrapped))
-public macro WrapProtocol() = #externalMacro(module: "ObservabilityKitMacros", type: "WrapProtocolMacro")
+@attached(accessor, names: named(CaptureIgnored))
+public macro CaptureIgnored() = #externalMacro(module: "ObservabilityKitMacros", type: "CaptureIgnoredMacro")
+
+@attached(peer)
+public macro CaptureKey(_ key: String) = #externalMacro(module: "ObservabilityKitMacros", type: "CaptureKeyMacro")
+
+
+
+@attached(body)
+public macro Captured() = #externalMacro(module: "ObservabilityKitMacros", type: "CapturedMacro")

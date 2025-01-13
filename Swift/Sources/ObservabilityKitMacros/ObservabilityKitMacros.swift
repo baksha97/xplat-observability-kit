@@ -28,6 +28,8 @@ public struct StringifyMacro: ExpressionMacro {
 @main
 struct ObservabilityKitMacros: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
-        StringifyMacro.self
+        StringifyMacro.self,
+        CapturedMacro.self,
+        CaptureKeyMacro.self
     ]
 }
