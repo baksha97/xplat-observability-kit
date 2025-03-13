@@ -5,7 +5,7 @@ package com.baksha.observability.core
  * This object serves as the main entry point for the monitoring system and public API containing annotations to mark
  * monitorable elements and classes to collect and process monitoring data.
  */
-object Monitor {
+public object Monitor {
     /**
      * Marks an interface as eligible for monitoring code generation.
      * When applied to an interface, the annotation processor will generate a monitoring proxy
@@ -21,7 +21,7 @@ object Monitor {
      */
     @Target(AnnotationTarget.CLASS)
     @Retention(AnnotationRetention.SOURCE)
-    annotation class Collectable
+    public annotation class Collectable
 
     /**
      * Customizes the monitoring key for a specific function.
@@ -38,7 +38,7 @@ object Monitor {
      */
     @Target(AnnotationTarget.FUNCTION)
     @Retention(AnnotationRetention.RUNTIME)
-    annotation class Function(val name: String)
+    public annotation class Function(val name: String)
 
     /**
      * Represents a single monitoring event with execution metrics.
@@ -47,7 +47,7 @@ object Monitor {
      * @property durationMillis The execution time in milliseconds
      * @property exception Any exception that occurred during execution, or null if successful
      */
-    data class Data(
+    public data class Data(
         val key: String,
         val durationMillis: Long,
         val exception: Throwable? = null,
@@ -58,19 +58,19 @@ object Monitor {
      * Implementations can define custom handling of monitoring events,
      * such as logging, metrics collection, or alerting.
      */
-    fun interface Collector {
+    public fun interface Collector {
         /**
          * Processes a monitoring event.
          *
          * @param data The monitoring data to process
          */
-        fun collect(data: Data)
+        public fun collect(data: Data)
     }
 
     /**
      * Provides built-in implementations of [Collector].
      */
-    object Collectors {
+    public object Collectors {
         /**
          * A simple collector that prints monitoring data to standard output.
          * Useful for debugging and development purposes.
@@ -80,7 +80,7 @@ object Monitor {
          * val service = userService.monitored(Monitor.Collectors.Printer())
          * ```
          */
-        class Printer: Collector {
+        public class Printer: Collector {
             override fun collect(data: Data) {
                 println(data)
             }
@@ -100,7 +100,7 @@ object Monitor {
          * )
          * ```
          */
-        class Composite(private vararg var collectors: Collector) : Collector {
+        public class Composite(private vararg var collectors: Collector) : Collector {
             override fun collect(data: Data) {
                 collectors.forEach { it.collect(data) }
             }

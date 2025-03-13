@@ -19,13 +19,13 @@ import kotlin.time.measureTimedValue
  * - Avoid having to explicitly deal with suspend functions
  * - Limit impact on the call stack since it's called in place
  */
-abstract class Capturing(
+public abstract class Capturing(
     /**
      * The collector responsible for handling captured metrics.
      * Implementations will receive timing information and any exceptions that occur
      * during method execution.
      */
-    val collector: Monitor.Collector
+    public val collector: Monitor.Collector
 ) {
 
     /**
@@ -38,7 +38,7 @@ abstract class Capturing(
      * @param E The type of value returned by the operation
      * @throws Throwable if the closure throws an exception
      */
-    inline fun <E> withThrowingCapture(
+    public inline fun <E> withThrowingCapture(
         key: String,
         closure: () -> E
     ): E =
@@ -56,7 +56,7 @@ abstract class Capturing(
      * @return The [Result] returned by the operation
      * @param E The type of value wrapped in the [Result]
      */
-    inline fun <E> withResultCapture(
+    public inline fun <E> withResultCapture(
         key: String,
         closure: () -> Result<E>
     ): Result<E> =
@@ -73,7 +73,7 @@ abstract class Capturing(
      * @return A [TimedValue] containing both the result and execution duration
      * @param T The type of value wrapped in the [Result] returned by the closure
      */
-    inline fun <T> capture(
+    public inline fun <T> capture(
         key: String,
         closure: () -> Result<T>
     ): TimedValue<Result<T>> {

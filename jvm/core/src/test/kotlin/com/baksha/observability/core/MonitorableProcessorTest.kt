@@ -1,7 +1,13 @@
 package com.baksha.observability.core
 
 import kotlinx.coroutines.test.runTest
-import kotlin.test.*
+import kotlin.test.BeforeTest
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * These tests ignore durationMs since actually testing that is tricky.
@@ -13,8 +19,36 @@ class MonitorableProcessorTest {
     @BeforeTest
     fun setup() {
         collector = TestCollector()
-        sut = TestImplementation()
-            .monitored(collector)
+        sut = TestImplementation(
+            nestedOptional = TestNested(),
+            nestedRequired = TestNested()
+        ).monitored(collector)
+    }
+
+    @Test
+    fun `test immutable property passthrough works correctly`() {
+        // The underlying implementation returns 1
+        assertEquals(1, sut.sample)
+
+        // Verify no monitoring data was collected for property access
+        assertTrue(collector.collectedData.isEmpty())
+    }
+
+    @Test
+    fun `test mutable property passthrough works correctly`() {
+        // Test initial value
+        assertEquals(0, sut.mutating)
+
+        // Test setting new value
+        sut.mutating = 42
+        assertEquals(42, sut.mutating)
+
+        // Test multiple updates
+        sut.mutating++
+        assertEquals(43, sut.mutating)
+
+        // Verify no monitoring data was collected for property access or modification
+        assertTrue(collector.collectedData.isEmpty())
     }
 
     @Test
@@ -152,6 +186,56 @@ class MonitorableProcessorTest {
             assertEquals(exceptionMessage, exception.message)
         }
     }
+
+    @Test
+    fun `test nested optional interface property passthrough works correctly`() {
+        assertEquals(3, sut.nestedOptional?.sample)
+
+        sut.nestedOptional?.mutating = 42
+        assertEquals(42, sut.nestedOptional?.mutating)
+
+        assertTrue(collector.collectedData.isEmpty())
+    }
+
+    @Test
+    fun `test nested optional interface monitored function works`() = runTest {
+        val input = "TestNestedInput"
+        val result = sut.nestedOptional?.resultSucceedingSuspendOperation(input)
+
+        assertTrue(result?.isSuccess == true)
+        assertEquals(input, result?.getOrThrow())
+
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("nested_result_successful_suspend_op", key)
+            assertNull(exception)
+        }
+    }
+
+    @Test
+    fun `test nested required interface property passthrough works correctly`() {
+        assertEquals(3, sut.nestedRequired.sample)
+
+        sut.nestedRequired.mutating = 42
+        assertEquals(42, sut.nestedRequired.mutating)
+
+        assertTrue(collector.collectedData.isEmpty())
+    }
+
+    @Test
+    fun `test nested required interface monitored function works`() = runTest {
+        val input = "TestNestedInput"
+        val result = sut.nestedRequired.resultSucceedingSuspendOperation(input)
+
+        assertTrue(result.isSuccess)
+        assertEquals(input, result.getOrThrow())
+
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("nested_result_successful_suspend_op", key)
+            assertNull(exception)
+        }
+    }
 }
 
 class TestCollector : Monitor.Collector {
@@ -167,6 +251,13 @@ class TestCollector : Monitor.Collector {
 
 @Monitor.Collectable
 interface TestInterface {
+    var mutating: Int
+
+    val sample: Int?
+
+    val nestedRequired: Nested
+    val nestedOptional: Nested?
+
     @Monitor.Function("successful_operation")
     fun successfulOperation(input: String): String
 
@@ -186,9 +277,25 @@ interface TestInterface {
 
     @Monitor.Function("result_failed_suspend_op")
     suspend fun resultFailingSuspendOperation(exception: Exception): Result<String>
+
+    @Monitor.Collectable
+    interface Nested {
+        var mutating: Int
+        val sample: Int?
+        @Monitor.Function("nested_result_successful_suspend_op")
+        suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
+    }
 }
 
-class TestImplementation : TestInterface {
+class TestImplementation(
+    override val nestedOptional: TestInterface.Nested,
+    override val nestedRequired: TestInterface.Nested
+): TestInterface {
+
+    override var mutating: Int = 0
+    override val sample: Int
+        get() = 1
+
     override fun successfulOperation(input: String): String {
         return input
     }
@@ -219,5 +326,13 @@ class TestImplementation : TestInterface {
 
     override suspend fun resultFailingSuspendOperation(exception: Exception): Result<String> {
         return Result.failure(exception)
+    }
+}
+
+class TestNested: TestInterface.Nested {
+    override var mutating: Int = 0
+    override val sample: Int = 3
+    override suspend fun resultSucceedingSuspendOperation(input: String): Result<String> {
+        return Result.success(input)
     }
 }

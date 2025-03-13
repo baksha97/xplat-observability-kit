@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.ExplicitApiMode
+
 plugins {
     alias(libs.plugins.kotlin.jvm)
     // Needed for test - otherwise wouldn't be needed.
@@ -13,4 +15,8 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlinx.coroutines.test)
+}
+
+kotlin {
+    explicitApi = ExplicitApiMode.Strict
 }

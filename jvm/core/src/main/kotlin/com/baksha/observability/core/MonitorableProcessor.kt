@@ -1,10 +1,28 @@
 package com.baksha.observability.core
 
 import com.google.devtools.ksp.getDeclaredFunctions
-import com.google.devtools.ksp.processing.*
-import com.google.devtools.ksp.symbol.*
+import com.google.devtools.ksp.processing.CodeGenerator
+import com.google.devtools.ksp.processing.Dependencies
+import com.google.devtools.ksp.processing.KSPLogger
+import com.google.devtools.ksp.processing.Resolver
+import com.google.devtools.ksp.processing.SymbolProcessor
+import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
+import com.google.devtools.ksp.processing.SymbolProcessorProvider
+import com.google.devtools.ksp.symbol.ClassKind
+import com.google.devtools.ksp.symbol.KSAnnotated
+import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
+import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.Modifier
 import com.google.devtools.ksp.validate
-import com.squareup.kotlinpoet.*
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import java.io.OutputStreamWriter
@@ -17,7 +35,7 @@ private const val COMPOSITE_COLLECTOR_SIMPLE_TYPE = "Monitor.Collectors.Composit
 
 private const val PACKAGE = "com.baksha.observability.core"
 
-class MonitorableProcessor(
+internal class MonitorableProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger
 ) : SymbolProcessor {
@@ -41,6 +59,16 @@ class MonitorableProcessor(
 
     private fun isResultType(type: KSType): Boolean {
         return type.declaration.qualifiedName?.asString() == "kotlin.Result"
+    }
+
+    private fun isCollectableInterface(type: KSType): Boolean {
+        val declaration = type.declaration
+        if (declaration is KSClassDeclaration && declaration.classKind == ClassKind.INTERFACE) {
+            return declaration.annotations.any {
+                it.annotationType.resolve().declaration.qualifiedName?.asString() == ANNOTATION_FQN
+            }
+        }
+        return false
     }
 
     private fun processInterface(declaration: KSClassDeclaration) {
@@ -76,56 +104,34 @@ class MonitorableProcessor(
                     .build()
             )
 
-        // Rest of the processInterface function remains the same...
+        // Handle functions
         declaration
             .getDeclaredFunctions()
+            .filter { it.validate() }
             .forEach { function ->
-                if (function.validate()) {
-                    generateMonitoredFunction(function, classBuilder)
-                }
+                generateMonitoredFunction(function, classBuilder)
             }
 
-        val extensionFun = FunSpec.builder("monitored")
-            .receiver(declaration.toClassName())
-            .returns(declaration.toClassName())
-            .addParameter(
-                ParameterSpec.builder(
-                    "collector",
-                    ClassName(PACKAGE, COLLECTOR_SIMPLE_TYPE)
-                )
-                    .defaultValue("$DEFAULT_COLLECTOR_SIMPLE_TYPE()")
-                    .build()
-            )
-            .addCode(
-                """
-            return ${proxyClassName}(
-                underlying = this,
-                collector = collector
-            )
-        """.trimIndent()
-            )
-            .build()
+        // Handle properties - both regular and nested interfaces
+        val nestedProxies = mutableListOf<PropertySpec>()
+        declaration.getAllProperties().filter { it.validate() }.forEach { property ->
+            val propertyType = property.type.resolve()
+            if (isCollectableInterface(propertyType)) {
+                val nestedProxyProperty = generateNestedProxy(property, classBuilder)
+                nestedProxies.add(nestedProxyProperty)
+            } else {
+                generatePropertyPassthrough(property, classBuilder)
+            }
+        }
 
-        val extensionFunVararg = FunSpec.builder("monitored")
-            .receiver(declaration.toClassName())
-            .returns(declaration.toClassName())
-            .addParameter(
-                ParameterSpec.builder(
-                    "collectors",
-                    ClassName(PACKAGE, COLLECTOR_SIMPLE_TYPE)
-                )
-                    .addModifiers(KModifier.VARARG)
-                    .build()
-            )
-            .addCode(
-                """
-            return ${proxyClassName}(
-                underlying = this,
-                collector = $COMPOSITE_COLLECTOR_SIMPLE_TYPE(*collectors)
-            )
-        """.trimIndent()
-            )
-            .build()
+        // Add nested proxies
+        nestedProxies.forEach { proxyProp ->
+            classBuilder.addProperty(proxyProp)
+        }
+
+        // Extension functions
+        val extensionFun = createExtensionFunction(declaration.toClassName(), proxyClassName)
+        val extensionFunVararg = createExtensionVarargFunction(declaration.toClassName(), proxyClassName)
 
         val file = FileSpec.builder(packageName, proxyClassName)
             .addImport(PACKAGE, "Monitor")
@@ -144,6 +150,107 @@ class MonitorableProcessor(
                 file.writeTo(writer)
             }
         }
+    }
+
+    private fun generatePropertyPassthrough(
+        property: KSPropertyDeclaration,
+        classBuilder: TypeSpec.Builder
+    ) {
+        val propertyBuilder = PropertySpec.builder(
+            property.simpleName.asString(),
+            property.type.resolve().toTypeName()
+        )
+            .addModifiers(KModifier.OVERRIDE)
+
+        // Add getter
+        propertyBuilder.getter(
+            FunSpec.getterBuilder()
+                .addCode("return underlying.${property.simpleName.asString()}")
+                .build()
+        )
+
+        // Add setter if property is mutable
+        if (property.isMutable) {
+            propertyBuilder.mutable(true)
+            propertyBuilder.setter(
+                FunSpec.setterBuilder()
+                    .addParameter("value", property.type.resolve().toTypeName())
+                    .addCode("underlying.${property.simpleName.asString()} = value")
+                    .build()
+            )
+        }
+
+        classBuilder.addProperty(propertyBuilder.build())
+    }
+
+    private fun generateNestedProxy(
+        property: KSPropertyDeclaration,
+        classBuilder: TypeSpec.Builder,
+    ): PropertySpec {
+        val propertyName = property.simpleName.asString()
+        val propertyType = property.type.resolve().toTypeName()
+        val isNullable = property.type.resolve().isMarkedNullable
+
+        val nestedProxyProperty = PropertySpec.builder(propertyName, propertyType)
+            .addModifiers(KModifier.OVERRIDE)
+            .initializer("${propertyName}Proxy")
+            .build()
+
+        val backingProperty = PropertySpec.builder("${propertyName}Proxy", propertyType)
+            .addModifiers(KModifier.PRIVATE)
+            .initializer(if (isNullable) {
+                "underlying.$propertyName?.monitored(collector)"
+            } else {
+                "underlying.$propertyName.monitored(collector)"
+            })
+            .build()
+
+        classBuilder.addProperty(backingProperty)
+
+        return nestedProxyProperty
+    }
+
+    private fun createExtensionFunction(interfaceClassName: ClassName, proxyClassName: String): FunSpec {
+        return FunSpec.builder("monitored")
+            .receiver(interfaceClassName)
+            .returns(interfaceClassName)
+            .addParameter(
+                ParameterSpec.builder("collector", ClassName(PACKAGE, COLLECTOR_SIMPLE_TYPE))
+                    .defaultValue("$DEFAULT_COLLECTOR_SIMPLE_TYPE()")
+                    .build()
+            )
+            .addCode(
+                """
+                return $proxyClassName(
+                    underlying = this,
+                    collector = collector
+                )
+                """.trimIndent()
+            )
+            .build()
+    }
+
+    private fun createExtensionVarargFunction(interfaceClassName: ClassName, proxyClassName: String): FunSpec {
+        return FunSpec.builder("monitored")
+            .receiver(interfaceClassName)
+            .returns(interfaceClassName)
+            .addParameter(
+                ParameterSpec.builder(
+                    "collectors",
+                    ClassName(PACKAGE, COLLECTOR_SIMPLE_TYPE)
+                )
+                    .addModifiers(KModifier.VARARG)
+                    .build()
+            )
+            .addCode(
+                """
+                return $proxyClassName(
+                    underlying = this,
+                    collector = $COMPOSITE_COLLECTOR_SIMPLE_TYPE(*collectors)
+                )
+                """.trimIndent()
+            )
+            .build()
     }
 
     private fun extractMethodName(function: KSFunctionDeclaration): String {
@@ -165,7 +272,6 @@ class MonitorableProcessor(
         val methodBuilder = FunSpec.builder(function.simpleName.asString())
             .addModifiers(KModifier.OVERRIDE)
 
-        // Add suspend modifier if the function is suspending
         if (function.modifiers.contains(Modifier.SUSPEND)) {
             methodBuilder.addModifiers(KModifier.SUSPEND)
         }
@@ -184,13 +290,9 @@ class MonitorableProcessor(
         val paramNames = function.parameters.joinToString(", ") { it.name?.asString() ?: "_" }
         val implCall = "underlying.${function.simpleName.asString()}($paramNames)"
 
+        val captureMethod = if (isResultReturn) "withResultCapture" else "withThrowingCapture"
 
-        val captureMethod =
-            if (isResultReturn) "withResultCapture"
-            else "withThrowingCapture"
-
-        val code =
-            """
+        val code = """
             |return $captureMethod("$methodName") {
             |    $implCall
             |}
@@ -201,7 +303,7 @@ class MonitorableProcessor(
     }
 }
 
-class MonitorableProcessorProvider : SymbolProcessorProvider {
+internal class MonitorableProcessorProvider : SymbolProcessorProvider {
     override fun create(
         environment: SymbolProcessorEnvironment
     ): SymbolProcessor {
