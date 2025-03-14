@@ -7,3 +7,11 @@ dependencies {
     implementation(project(":core"))
     ksp(project(":core"))
 }
+
+kotlin {
+    sourceSets.all {
+        languageSettings {
+            optIn("kotlin.ExperimentalStdlibApi")
+        }
+    }
+}

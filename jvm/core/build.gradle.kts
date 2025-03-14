@@ -10,6 +10,7 @@ dependencies {
     implementation(libs.kotlin.stdlib)
     implementation(libs.ksp.symbol.processing.api)
     implementation(libs.kotlin.poet)
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1")
 
     kspTest(project(":core"))
     testImplementation(libs.mockk)
@@ -19,4 +20,12 @@ dependencies {
 
 kotlin {
     explicitApi = ExplicitApiMode.Strict
+    sourceSets.all {
+        languageSettings {
+            optIn("kotlin.ExperimentalStdlibApi")
+        }
+    }
+    compilerOptions {
+        freeCompilerArgs = listOf("-Xopt-in=kotlin.time.ExperimentalTime", "-Xcontext-receivers")
+    }
 }

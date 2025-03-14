@@ -1,5 +1,7 @@
 package com.baksha.observability.core
 
+import kotlin.coroutines.CoroutineContext
+
 /**
  * Core monitoring functionality that provides annotations and data structures for method execution tracking.
  * This object serves as the main entry point for the monitoring system and public API containing annotations to mark
