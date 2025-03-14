@@ -42,14 +42,56 @@ import kotlin.random.Random
  */
 @Monitor.Collectable
 interface UserService {
-    @Monitor.Function(name = "get_user")
+    var mutating: Int
+
+    val sample: Int?
+
+    val nestedRequired: Nested
+    val nestedOptional: Nested?
+
+    @Monitor.Function("get_user")
     fun getUser(id: String): String
 
-    @Monitor.Function(name = "validate_credentials")
+    @Monitor.Function("validate_credentials")
     fun validateCredentials(username: String, password: String): Result<Boolean>
+
+    @Monitor.Function("successful_operation")
+    fun successfulOperation(input: String): String
+
+    @Monitor.Function("successful_suspend_operation")
+    suspend fun successfulSuspendOperation(input: String): String
+
+    fun failingOperation(exception: Exception): String
+
+    suspend fun failingSuspendOperation(exception: Exception): String
+
+    fun resultSucceedingOperation(input: String): Result<String>
+
+    suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
+
+    @Monitor.Function("result_failed_op")
+    fun resultFailingOperation(exception: Exception): Result<String>
+
+    @Monitor.Function("result_failed_suspend_op")
+    suspend fun resultFailingSuspendOperation(exception: Exception): Result<String>
+
+    @Monitor.Collectable
+    interface Nested {
+        var mutating: Int
+        val sample: Int?
+        @Monitor.Function("nested_result_successful_suspend_op")
+        suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
+    }
 }
 
-class UserServiceImpl : UserService {
+class UserServiceImpl(
+    override val nestedOptional: UserService.Nested,
+    override val nestedRequired: UserService.Nested
+) : UserService {
+    override var mutating: Int = 0
+    override val sample: Int?
+        get() = 1
+
     override fun getUser(id: String): String {
         Thread.sleep(Random.nextLong(100, 500)) // Simulate work
         if (Random.nextDouble() < 0.3) {
@@ -67,8 +109,47 @@ class UserServiceImpl : UserService {
             username == password
         }
     }
+
+    override fun successfulOperation(input: String): String {
+        return input
+    }
+
+    override suspend fun successfulSuspendOperation(input: String): String {
+        return input
+    }
+
+    override fun failingOperation(exception: Exception): String {
+        throw exception
+    }
+
+    override suspend fun failingSuspendOperation(exception: Exception): String {
+        throw exception
+    }
+
+    override fun resultSucceedingOperation(input: String): Result<String> {
+        return Result.success(input)
+    }
+
+    override suspend fun resultSucceedingSuspendOperation(input: String): Result<String> {
+        return Result.success(input)
+    }
+
+    override fun resultFailingOperation(exception: Exception): Result<String> {
+        return Result.failure(exception)
+    }
+
+    override suspend fun resultFailingSuspendOperation(exception: Exception): Result<String> {
+        return Result.failure(exception)
+    }
 }
 
+class TestNested : UserService.Nested {
+    override var mutating: Int = 0
+    override val sample: Int = 3
+    override suspend fun resultSucceedingSuspendOperation(input: String): Result<String> {
+        return Result.success(input)
+    }
+}
 
 private class UserNotFoundException(id: String) : Exception("User not found: $id")
 private class ServiceUnavailableException : Exception("Service temporarily unavailable")
