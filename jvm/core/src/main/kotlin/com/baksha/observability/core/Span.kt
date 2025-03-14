@@ -13,12 +13,16 @@ public interface Span {
     public val name: String
     public val attributes: Map<String, Any>
     public val error: Throwable?
+    public val parent: Span? // Add parent property
     public fun end()
     public fun addAttribute(key: String, value: Any)
     public fun recordError(error: Throwable)
 }
 
-public data class SimpleSpan(override val name: String) : Span {
+public data class SimpleSpan(
+    override val name: String,
+    override val parent: Span? = null // Add parent property
+) : Span {
     private val startTime = TimeSource.Monotonic.markNow()
     private var duration: Duration? = null
     override val attributes: MutableMap<String, Any> = mutableMapOf()
@@ -49,11 +53,24 @@ public class SpanCollectorContext(public val collector: SpanCollector) : Abstrac
     public companion object Key : CoroutineContext.Key<SpanCollectorContext>
 }
 
+public class PrinterSpanCollector(private val output: (String) -> Unit = ::println) : SpanCollector {
+    override fun collect(span: Span) {
+        output("Span collected: \\${span.name}, Parent: \\${span.parent?.name}, Attributes: \\${span.attributes}, Error: \\${span.error}")
+    }
+}
+
+public class CompositeSpanCollector(private vararg val collectors: SpanCollector) : SpanCollector {
+    override fun collect(span: Span) {
+        collectors.forEach { it.collect(span) }
+    }
+}
+
 public suspend inline fun <T> withSpan(
     name: String,
     crossinline block: suspend CoroutineScope.(Span) -> T
 ): T {
-    val span = SimpleSpan(name)
+    val parentSpan = coroutineContext[SpanContext]?.span
+    val span = SimpleSpan(name, parentSpan) // Set parent span
     val spanContext = SpanContext(span)
     return withContext(spanContext) {
         try {
