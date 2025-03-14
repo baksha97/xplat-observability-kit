@@ -49,31 +49,32 @@ public class SpanCollectorContext(public val collector: SpanCollector) : Abstrac
     public companion object Key : CoroutineContext.Key<SpanCollectorContext>
 }
 
-context(SpanCollector)
 public suspend inline fun <T> withSpan(
     name: String,
-    crossinline block: context(Span) CoroutineScope.() -> T
+    crossinline block: suspend CoroutineScope.(Span) -> T
 ): T {
     val span = SimpleSpan(name)
     val spanContext = SpanContext(span)
     return withContext(spanContext) {
         try {
-            block.invoke(span, this)
+            block(span)
         } catch (e: Throwable) {
             span.recordError(e)
             throw e
         } finally {
             span.end()
-            this@SpanCollector.collect(span)
+            val collectorContext = coroutineContext[SpanCollectorContext]
+            collectorContext?.collector?.collect(span)
         }
     }
 }
 
 public suspend inline fun withSpanCollector(
     collector: SpanCollector,
-    crossinline block: context(SpanCollector) CoroutineScope.() -> Unit
+    crossinline block: suspend CoroutineScope.(SpanCollector) -> Unit
 ) {
-    withContext(coroutineContext + SpanCollectorContext(collector)) {
-        block.invoke(collector, this)
+    val collectorContext = SpanCollectorContext(collector)
+    withContext(collectorContext) {
+        block(collector)
     }
 }

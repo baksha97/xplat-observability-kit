@@ -9,8 +9,10 @@ import kotlin.test.assertNull
 import kotlin.test.assertFailsWith
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
 import kotlin.time.TimeSource
+import kotlinx.coroutines.withContext
 
 class SpanTest {
     private lateinit var collector: TestSpanCollector
@@ -47,15 +49,11 @@ class SpanTest {
 
     @Test
     fun `test withSpan function`() = runTest {
-        withSpanCollector(collector) {
-            launch {
-                withSpan("testSpan") {
-                    // Span should be active within this block
-                    assertNotNull(coroutineContext[SpanContext]?.span)
-                }
+        withContext(SpanCollectorContext(collector)) {
+            withSpan("testSpan") { span ->
+                assertNotNull(coroutineContext[SpanContext]?.span)
             }
         }
-        // Span should be collected after the block
         assertEquals(1, collector.collectedSpans.size)
         assertEquals("testSpan", collector.collectedSpans.first().name)
     }
@@ -63,14 +61,11 @@ class SpanTest {
     @Test
     fun `test withSpanCollector function`() = runTest {
         withSpanCollector(collector) {
-            launch {
-                withSpan("testSpan") {
-                    // Span should be active within this block
-                    assertNotNull(coroutineContext[SpanContext]?.span)
-                }
+            withSpan("testSpan") { span ->
+                val activeSpan = coroutineContext[SpanContext]?.span
+                assertNotNull(activeSpan)
             }
         }
-        // Span should be collected after the block
         assertEquals(1, collector.collectedSpans.size)
         assertEquals("testSpan", collector.collectedSpans.first().name)
     }
