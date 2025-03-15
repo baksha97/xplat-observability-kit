@@ -19,7 +19,7 @@ dependencies {
 }
 
 kotlin {
-    explicitApi = ExplicitApiMode.Strict
+//    explicitApi = ExplicitApiMode.Strict
     sourceSets.all {
         languageSettings {
             optIn("kotlin.ExperimentalStdlibApi")

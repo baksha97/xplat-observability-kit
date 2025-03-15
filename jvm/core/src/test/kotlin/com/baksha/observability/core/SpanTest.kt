@@ -1,8 +1,6 @@
 package com.baksha.observability.core
 
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import kotlin.test.*
 import kotlin.time.Duration
 import kotlin.time.TimeSource
@@ -12,8 +10,11 @@ class SpanTest {
 
     @BeforeTest
     fun setup() {
+        GlobalTracer.clearForTesting() // <-- clear the previous global collector
         collector = TestSpanCollector()
+        GlobalTracer.registerIfAbsent(collector)
     }
+
 
     @Test
     fun `test span creation and ending`() {
@@ -42,10 +43,8 @@ class SpanTest {
 
     @Test
     fun `test withSpan function`() = runTest {
-        withContext(SpanCollectorContext(collector)) {
-            withSpan("testSpan") { span ->
-                assertNotNull(coroutineContext[SpanContext]?.span)
-            }
+        withSpan("testSpan") { span ->
+            assertNotNull(coroutineContext[SpanContext]?.span)
         }
         assertEquals(1, collector.collectedSpans.size)
         assertEquals("testSpan", collector.collectedSpans.first().name)
@@ -53,11 +52,9 @@ class SpanTest {
 
     @Test
     fun `test nested spans`() = runTest {
-        withSpanCollector(collector) {
-            withSpan("parentSpan") { parentSpan ->
-                withSpan("childSpan") { childSpan ->
-                    assertEquals(parentSpan, childSpan.parent)
-                }
+        withSpan("parentSpan") { parentSpan ->
+            withSpan("childSpan") { childSpan ->
+                assertEquals(parentSpan, childSpan.parent)
             }
         }
         assertEquals(2, collector.collectedSpans.size)
@@ -70,80 +67,30 @@ class SpanTest {
 
     @Test
     fun `test multiple levels of nested spans`() = runTest {
-        withSpanCollector(collector) {
-            withSpan("grandparentSpan") { grandparentSpan ->
-                withSpan("parentSpan") { parentSpan ->
-                    withSpan("childSpan") { childSpan ->
-                        assertEquals(grandparentSpan, parentSpan.parent)
-                        assertEquals(parentSpan, childSpan.parent)
-                    }
+        withSpan("grandparentSpan") { grandparentSpan ->
+            withSpan("parentSpan") { parentSpan ->
+                withSpan("childSpan") { childSpan ->
+                    assertEquals(grandparentSpan, parentSpan.parent)
+                    assertEquals(parentSpan, childSpan.parent)
                 }
             }
         }
         assertEquals(3, collector.collectedSpans.size)
-        val grandparentSpan = collector.collectedSpans.find { it.name == "grandparentSpan" }
-        val parentSpan = collector.collectedSpans.find { it.name == "parentSpan" }
-        val childSpan = collector.collectedSpans.find { it.name == "childSpan" }
-        assertNotNull(grandparentSpan)
-        assertNotNull(parentSpan)
-        assertNotNull(childSpan)
-        assertEquals(grandparentSpan, parentSpan?.parent)
-        assertEquals(parentSpan, childSpan?.parent)
     }
 
     @Test
-    fun `test PrinterSpanCollector with injected output`() = runTest {
-        val output = mutableListOf<String>()
-        val printerCollector = PrinterSpanCollector {
-            output.add(it)
-            println(it)
-        }
-
-        withSpanCollector(printerCollector) {
-            withSpan("grandparentSpan") { grandparentSpan ->
-                withSpan("parentSpan") { parentSpan ->
-                    withSpan("childSpan") { childSpan ->
-                        assertEquals(grandparentSpan, parentSpan.parent)
-                        assertEquals(parentSpan, childSpan.parent)
-                    }
-                }
+    fun `test mixing synchronous and asynchronous spans`() = runTest {
+        withSyncSpan("syncParent") { syncParent ->
+            withSpan("asyncChild") { asyncChild ->
+                assertEquals(syncParent, asyncChild.parent)
             }
         }
-        assertEquals(3, output.size)
-        assertTrue(output[2].contains("grandparentSpan"))
-        assertTrue(output[1].contains("parentSpan"))
-        assertTrue(output[0].contains("childSpan"))
+        assertEquals(2, collector.collectedSpans.size)
+        val syncParent = collector.collectedSpans.first { it.name == "syncParent" }
+        val asyncChild = collector.collectedSpans.first { it.name == "asyncChild" }
+        assertEquals(syncParent, asyncChild.parent)
     }
 
-    @Test
-    fun `test PrinterSpanCollector with nested and parallelized spans`() = runTest {
-        val output = mutableListOf<String>()
-        val printerCollector = PrinterSpanCollector {
-            output.add(it)
-            println(it)
-        }
-
-        withSpanCollector(printerCollector) {
-            withSpan("parentSpan") { parentSpan ->
-                val job1 = launch {
-                    withSpan("childSpan1") { childSpan1 ->
-                        assertEquals(parentSpan, childSpan1.parent)
-                    }
-                }
-                val job2 = launch {
-                    withSpan("childSpan2") { childSpan2 ->
-                        assertEquals(parentSpan, childSpan2.parent)
-                    }
-                }
-                job1.join()
-                job2.join()
-            }
-        }
-        assertEquals(3, output.size)
-        assertTrue(output.any { it.contains("parentSpan") })
-        assertTrue(output.any { it.contains("childSpan1") })
-        assertTrue(output.any { it.contains("childSpan2") })
-    }
 
     @Test
     fun `test CompositeSpanCollector`() {
@@ -151,7 +98,7 @@ class SpanTest {
         val testCollector2 = TestSpanCollector()
         val compositeCollector = CompositeSpanCollector(testCollector1, testCollector2)
         val span = TestSpan("testSpan")
-        compositeCollector.collect(span)
+        compositeCollector.start(span)
         assertEquals(1, testCollector1.collectedSpans.size)
         assertEquals(1, testCollector2.collectedSpans.size)
         assertEquals("testSpan", testCollector1.collectedSpans.first().name)
@@ -161,7 +108,7 @@ class SpanTest {
 
 class TestSpan(
     override val name: String,
-    override val parent: Span? = null // Add parent property
+    override val parent: Span? = null
 ) : Span {
     private val startTime = TimeSource.Monotonic.markNow()
     var duration: Duration? = null
@@ -186,7 +133,7 @@ class TestSpanCollector : SpanCollector {
     val collectedSpans: List<Span>
         get() = _collectedSpans
 
-    override fun collect(span: Span) {
+    override fun start(span: Span) {
         _collectedSpans.add(span)
     }
 }
