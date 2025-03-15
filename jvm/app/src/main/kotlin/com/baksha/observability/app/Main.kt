@@ -115,9 +115,14 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
                 launch {
                     withSpanCapture("launch1-wsync") {
                         withSpanCapture("launch1-wsync-wsync") {}
+                        withSpanCapture("launch1-wsync-wsync-dispatcher") {}
                     }
                     withSuspendingSpanCapture("launch1-wsuspend") {
+                        withSpanCapture("launch1-wsuspend-wsync") {}
                         withSuspendingSpanCapture("launch1-wsuspend-wsuspend") {}
+                        withContext(Dispatchers.IO) {
+                            withSuspendingSpanCapture("launch1-wsuspend-wsuspend-Dispatchers.IO") {}
+                        }
                     }
                 }
             }
