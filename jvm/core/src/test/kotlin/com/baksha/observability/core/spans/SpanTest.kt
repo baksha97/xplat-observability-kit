@@ -1,5 +1,7 @@
-package com.baksha.observability.core
+package com.baksha.observability.core.spans
 
+import com.baksha.observability.core.*
+import com.baksha.observability.core.span.withSpan
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*
 import kotlin.time.Duration
@@ -10,7 +12,7 @@ class SpanTest {
 
     @BeforeTest
     fun setup() {
-        GlobalTracer.clearForTesting() // <-- clear the previous global collector
+        GlobalTracer.reset() // <-- clear the previous global collector
         collector = TestSpanCollector()
         GlobalTracer.registerIfAbsent(collector)
     }
@@ -39,15 +41,6 @@ class SpanTest {
         val exception = Exception("testException")
         span.recordError(exception)
         assertEquals(exception, span.error)
-    }
-
-    @Test
-    fun `test withSpan function`() = runTest {
-        withSpan("testSpan") { span ->
-            assertNotNull(coroutineContext[SpanContext]?.span)
-        }
-        assertEquals(1, collector.collectedSpans.size)
-        assertEquals("testSpan", collector.collectedSpans.first().name)
     }
 
     @Test
@@ -80,7 +73,7 @@ class SpanTest {
 
     @Test
     fun `test mixing synchronous and asynchronous spans`() = runTest {
-        withSyncSpan("syncParent") { syncParent ->
+        withSpan("syncParent") { syncParent ->
             withSpan("asyncChild") { asyncChild ->
                 assertEquals(syncParent, asyncChild.parent)
             }

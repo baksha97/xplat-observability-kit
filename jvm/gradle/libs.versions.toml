@@ -5,6 +5,9 @@ ksp = "2.0.21-1.0.26"
 kotlin-poet = "2.0.0"
 mockk = "1.13.11"
 coroutines-test = "1.10.1"
+
+opentelemetry = "1.48.0"
+opentelemetry-alpha = "1.48.0-alpha"
 [libraries]
 kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlin" }
 
@@ -17,6 +20,8 @@ kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.re
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines-test" }
 
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "opentelemetry" }
+opentelemetry-api-incubator = { module = "io.opentelemetry:opentelemetry-api-incubator", version.ref = "opentelemetry-alpha" }
 
 [plugins]
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
