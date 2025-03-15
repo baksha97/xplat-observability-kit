@@ -5,8 +5,11 @@ import io.opentelemetry.api.trace.StatusCode
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.context.Context
 import io.opentelemetry.extension.kotlin.asContextElement
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.newCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.coroutines.coroutineContext
 
 /**
  * Provides functionality for capturing execution metrics (duration and errors)
@@ -154,10 +157,9 @@ suspend inline fun <T> withSpan(
         attributes.forEach(::setAttribute)
         startSpan()
     }
-
-    return withContext(
-        Context.current().with(span).asContextElement()
-    ) {
+    // TODO: Is it possible to persist coroutine context through `launch` uses?
+    val context = coroutineContext + Context.current().with(span).asContextElement()
+    return withContext(context) {
         try {
             block(span)
         }

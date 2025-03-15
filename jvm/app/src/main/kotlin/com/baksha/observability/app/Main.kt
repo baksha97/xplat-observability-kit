@@ -1,7 +1,6 @@
 package com.baksha.observability.app
 
 import com.baksha.observability.core.span.SpanCapturing
-import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
 import io.opentelemetry.sdk.OpenTelemetrySdk
@@ -9,10 +8,8 @@ import io.opentelemetry.sdk.common.CompletableResultCode
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.data.SpanData
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor
-import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor
 import io.opentelemetry.sdk.trace.export.SpanExporter
 import kotlinx.coroutines.*
-import kotlin.coroutines.CoroutineContext
 
 class ConsoleSpanExporter : SpanExporter {
     override fun export(spans: MutableCollection<SpanData>): CompletableResultCode {
@@ -80,42 +77,11 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
         }
     }
 
-    fun demoLaunchContextLoss() = withSpanCapture("demoLaunchContextLoss") {
-        scope.launch {
-            withSpanCapture("launch1-sync") {
-                launch {
-                    withSpanCapture("launch1-wsync") {
-                        withSpanCapture("launch1-wsync-wsync") {}
-                    }
-                    withSuspendingSpanCapture("launch1-wsuspend") {
-                        withSuspendingSpanCapture("launch1-wsuspend-wsuspend") {}
-                    }
-                }
-            }
-
-            withSuspendingSpanCapture("launch2-suspend") {
-                launch {
-                    withSuspendingSpanCapture("inside2") {
-                        withSpanCapture("launch2-wsync") {
-                            withSpanCapture("launch2-wsync-wsync") {}
-                        }
-                        withSuspendingSpanCapture("launch2-wsuspend") {
-                            withSpanCapture("launch2-wsuspend-wsync") {}
-                            withSuspendingSpanCapture("launch2-wsuspend-wsuspend") {}
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     fun doSuspending() {
         with(scope) {
             launch {
                 withSuspendingSpanCapture("root") {
-                    withSpanCapture("root-sub") {
-
-                    }
+                    withSpanCapture("root-sub") { }
                     launch {
                         withSuspendingSpanCapture("coroutine1-start") {
                             withSuspendingSpanCapture("coroutine1-sub") {
@@ -135,6 +101,36 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
                                     }
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun demoLaunchContextLoss() = withSpanCapture("demoLaunchContextLoss") {
+        scope.launch {
+            withSpanCapture("launch1-sync") {
+                it.addEvent("launch1-event")
+                launch {
+                    withSpanCapture("launch1-wsync") {
+                        withSpanCapture("launch1-wsync-wsync") {}
+                    }
+                    withSuspendingSpanCapture("launch1-wsuspend") {
+                        withSuspendingSpanCapture("launch1-wsuspend-wsuspend") {}
+                    }
+                }
+            }
+
+            withSuspendingSpanCapture("launch2-suspend") {
+                launch {
+                    withSuspendingSpanCapture("inside2") {
+                        withSpanCapture("launch2-wsync") {
+                            withSpanCapture("launch2-wsync-wsync") {}
+                        }
+                        withSuspendingSpanCapture("launch2-wsuspend") {
+                            withSpanCapture("launch2-wsuspend-wsync") {}
+                            withSuspendingSpanCapture("launch2-wsuspend-wsuspend") {}
                         }
                     }
                 }
