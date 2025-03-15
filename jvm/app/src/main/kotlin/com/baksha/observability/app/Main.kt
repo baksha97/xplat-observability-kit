@@ -1,6 +1,7 @@
 package com.baksha.observability.app
 
 import com.baksha.observability.core.span.SpanCapturing
+import io.opentelemetry.api.GlobalOpenTelemetry
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
 import io.opentelemetry.sdk.OpenTelemetrySdk
@@ -10,10 +11,10 @@ import io.opentelemetry.sdk.trace.data.SpanData
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor
 import io.opentelemetry.sdk.trace.export.SpanExporter
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.*
+import kotlin.coroutines.CoroutineContext
 
-class ConsoleSpanExporter: SpanExporter {
+class ConsoleSpanExporter : SpanExporter {
     override fun export(spans: MutableCollection<SpanData>): CompletableResultCode {
         spans.forEach {
             println("====${it.name}====")
@@ -64,7 +65,9 @@ object SampleApp {
     }
 }
 
-object ExampleSystem: SpanCapturing(SampleApp.tracer) {
+object ExampleSystem : SpanCapturing(SampleApp.tracer) {
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     fun doSomething() {
         println(":doSomething:...")
 
@@ -72,14 +75,77 @@ object ExampleSystem: SpanCapturing(SampleApp.tracer) {
             println("Doing 1")
             withSpanCapture("do_something2") {
                 println("Doing 2")
+
             }
         }
     }
 
+    fun demoLaunchContextLoss() = withSpanCapture("demoLaunchContextLoss") {
+        scope.launch {
+            withSpanCapture("launch1-sync") {
+                launch {
+                    withSpanCapture("launch1-wsync") {
+                        withSpanCapture("launch1-wsync-wsync") {}
+                    }
+                    withSuspendingSpanCapture("launch1-wsuspend") {
+                        withSuspendingSpanCapture("launch1-wsuspend-wsuspend") {}
+                    }
+                }
+            }
+
+            withSuspendingSpanCapture("launch2-suspend") {
+                launch {
+                    withSuspendingSpanCapture("inside2") {
+                        withSpanCapture("launch2-wsync") {
+                            withSpanCapture("launch2-wsync-wsync") {}
+                        }
+                        withSuspendingSpanCapture("launch2-wsuspend") {
+                            withSpanCapture("launch2-wsuspend-wsync") {}
+                            withSuspendingSpanCapture("launch2-wsuspend-wsuspend") {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun doSuspending() {
+        with(scope) {
+            launch {
+                withSuspendingSpanCapture("root") {
+                    withSpanCapture("root-sub") {
+
+                    }
+                    launch {
+                        withSuspendingSpanCapture("coroutine1-start") {
+                            withSuspendingSpanCapture("coroutine1-sub") {
+                                withSpanCapture("coroutine1-sub-1") {
+
+                                }
+                                withSuspendingSpanCapture("coroutine1-sub-2") {
+
+                                }
+                            }
+                            launch {
+                                withSuspendingSpanCapture("coroutine2-start") {
+                                    withSuspendingSpanCapture("coroutine2-sub") {
+                                        withSuspendingSpanCapture("coroutine2-sub-sub") {
+
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 fun main() = runBlocking {
     System.setProperty("otel.log.level", "DEBUG")
-    ExampleSystem.doSomething()
-    delay(1_000_000_000)
+    ExampleSystem.demoLaunchContextLoss()
+//    ExampleSystem.doSomething()
+    delay(1_000_000)
 }
