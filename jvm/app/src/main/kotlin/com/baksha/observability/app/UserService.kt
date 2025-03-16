@@ -1,5 +1,6 @@
 package com.baksha.observability.app
 import com.baksha.observability.core.Monitor
+import com.baksha.observability.core.span.Traceable
 import kotlin.random.Random
 
 
@@ -41,6 +42,7 @@ import kotlin.random.Random
  *```
  */
 @Monitor.Collectable
+@Traceable
 interface UserService {
     var mutating: Int
 
@@ -60,7 +62,11 @@ interface UserService {
 
     @Monitor.Function("successful_suspend_operation")
     suspend fun successfulSuspendOperation(input: String): String
-
+    @Traceable.Span(
+        name = "failingOperation_demo",
+        captureParameters = ["exception"],
+        additionalContextFromAttributes = ["sample"]
+    )
     fun failingOperation(exception: Exception): String
 
     suspend fun failingSuspendOperation(exception: Exception): String
@@ -73,6 +79,11 @@ interface UserService {
     fun resultFailingOperation(exception: Exception): Result<String>
 
     @Monitor.Function("result_failed_suspend_op")
+    @Traceable.Span(
+        name = "resultFailingSuspendOperation_demo",
+        captureParameters = ["exception"],
+        additionalContextFromAttributes = ["sample"]
+    )
     suspend fun resultFailingSuspendOperation(exception: Exception): Result<String>
 
     @Monitor.Collectable
