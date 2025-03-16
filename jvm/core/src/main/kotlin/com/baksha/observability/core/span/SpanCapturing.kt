@@ -5,12 +5,12 @@ import io.opentelemetry.api.trace.StatusCode
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.context.Context
 import io.opentelemetry.extension.kotlin.asContextElement
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.newCoroutineContext
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
-import kotlin.coroutines.coroutineContext
 
+fun exceptionIsError(throwable: Throwable): Boolean = throwable !is CancellationException
 /**
  * Provides functionality for capturing execution metrics (duration and errors)
  * while delegating span creation and error handling to the existing functions.
@@ -77,10 +77,10 @@ abstract class SpanCapturing(val tracer: Tracer) {
     suspend inline fun <T> withSuspendingSpanCapture(
         key: String,
         attributes: Map<String, String> = emptyMap(),
-        crossinline exceptionIsError: (Throwable) -> Boolean = { it !is CancellationException },
+        coroutineContext: CoroutineContext = EmptyCoroutineContext,
         crossinline block: suspend (Span) -> T
     ): T  =
-        withSpan(tracer, key, attributes, exceptionIsError) {
+        withSuspendingSpan(tracer, key, attributes, coroutineContext) {
              block(it)
         }
 
@@ -96,10 +96,10 @@ abstract class SpanCapturing(val tracer: Tracer) {
     suspend inline fun <T> withSuspendingSpanCaptureResult(
         key: String,
         attributes: Map<String, String> = emptyMap(),
-        crossinline exceptionIsError: (Throwable) -> Boolean = { it !is CancellationException },
+        coroutineContext: CoroutineContext = EmptyCoroutineContext,
         crossinline block: suspend (Span) -> Result<T>
     ): Result<T> =
-        withSpan(tracer, key, attributes, exceptionIsError) {
+        withSuspendingSpan(tracer, key, attributes, coroutineContext) {
             block(it)
         }
 }
@@ -142,22 +142,19 @@ inline fun <T> withSpan(
     }
 }
 
-/**
- * OTEL SDK API
- * Async/Kotlin `withSpan`
- */
-suspend inline fun <T> withSpan(
+
+suspend inline fun <T> withSuspendingSpan(
     tracer: Tracer,
     spanName: String,
     attributes: Map<String, String> = emptyMap(),
-    crossinline exceptionIsError: (Throwable) -> Boolean,
+    coroutineContext: CoroutineContext = EmptyCoroutineContext,
     crossinline block: suspend (span: Span) -> T
 ): T {
     val span: Span = tracer.spanBuilder(spanName).run {
         attributes.forEach(::setAttribute)
         startSpan()
     }
-    return withContext(span.asContextElement()) {
+    return withContext(coroutineContext + span.asContextElement()) {
         try {
             block(span)
         }

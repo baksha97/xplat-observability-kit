@@ -1,8 +1,10 @@
 package com.baksha.observability.app
 
 import com.baksha.observability.core.span.SpanCapturing
+import com.baksha.observability.core.span.withSuspendingSpan
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
+import io.opentelemetry.extension.kotlin.asContextElement
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.common.CompletableResultCode
 import io.opentelemetry.sdk.resources.Resource
@@ -102,11 +104,11 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
         }
     }
 
-    fun demoLaunchContextLoss() = withSpanCapture("demoLaunchContextLoss") {
+    fun demoLaunchContextLoss() = withSpanCapture("demoLaunchContextLoss") { rootSpan ->
         scope.launch {
             withSpanCapture("launch1-sync") {
                 it.addEvent("launch1-event")
-                launch {
+                launch() {
                     withSpanCapture("launch1-wsync") {
                         withSpanCapture("launch1-wsync-wsync") {}
                         withSpanCapture("launch1-wsync-wsync-dispatcher") {}
@@ -136,11 +138,34 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
             }
         }
     }
+
+    suspend fun moreDebugging(): Unit =
+        withSuspendingSpanCapture("withSuspendingSpanCapture") { rootContext ->
+            // Correct
+            withSpanCapture("withSpanCapture") {}
+            // Correct
+            withSuspendingSpanCapture("withSuspendingSpanCapture") {}
+
+            // Launch but the span context is lost and gone
+            scope.launch {
+                // Created its own root context
+                withSpanCapture("withSpanCapture.scope.launch") {}
+                // Created its own root context
+                withSuspendingSpanCapture("withSuspendingSpanCapture.scope.launch") {}
+            }
+
+            // To fix this, we need to pass the root context explicitly...
+            // The span context is lost in the launch block for some reason....
+            scope.launch(rootContext.asContextElement()) {
+                withSpanCapture("withSpanCapture.scope.launch+rootContext") {}
+                withSuspendingSpanCapture("withSuspendingSpanCapture.scope.launch+rootContext") {}
+            }
+        }
 }
 
 fun main() = runBlocking {
     System.setProperty("otel.log.level", "DEBUG")
-    ExampleSystem.demoLaunchContextLoss()
+    ExampleSystem.moreDebugging()
 //    ExampleSystem.doSomething()
     delay(1_000_000)
 }
