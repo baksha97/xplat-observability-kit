@@ -12,6 +12,7 @@ import io.opentelemetry.sdk.trace.export.SpanExporter
 import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import java.lang.Exception
 
 class ConsoleSpanExporter : SpanExporter {
     override fun export(spans: MutableCollection<SpanData>): CompletableResultCode {
@@ -74,7 +75,9 @@ object SampleApp {
 //    delay(1_000_000)
 //}
 
-fun main() {
+fun main(): Unit = runBlocking {
     val userService = UserServiceImpl(TestNested(), TestNested())
         .traced(SampleApp.tracer)
+    userService.resultFailingSuspendOperation(Exception("Error, World!"))
+    delay(1000)
 }

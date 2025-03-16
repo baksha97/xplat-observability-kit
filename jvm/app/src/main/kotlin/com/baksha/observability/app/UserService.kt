@@ -52,6 +52,11 @@ interface UserService {
     val nestedOptional: Nested?
 
     @Monitor.Function("get_user")
+    @Traceable.Span(
+        name = "getUser_demo",
+        captureParameters = ["id"],
+        additionalContextFromAttributes = ["sample"]
+    )
     fun getUser(id: String): String
 
     @Monitor.Function("validate_credentials")
@@ -71,6 +76,11 @@ interface UserService {
 
     suspend fun failingSuspendOperation(exception: Exception): String
 
+    @Traceable.Span(
+        name = "resultSucceedingOperation_demo",
+        captureParameters = ["input"],
+        additionalContextFromAttributes = ["sample"]
+    )
     fun resultSucceedingOperation(input: String): Result<String>
 
     suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
@@ -79,11 +89,6 @@ interface UserService {
     fun resultFailingOperation(exception: Exception): Result<String>
 
     @Monitor.Function("result_failed_suspend_op")
-    @Traceable.Span(
-        name = "resultFailingSuspendOperation_demo",
-        captureParameters = ["exception"],
-        additionalContextFromAttributes = ["sample"]
-    )
     suspend fun resultFailingSuspendOperation(exception: Exception): Result<String>
 
     @Monitor.Collectable
