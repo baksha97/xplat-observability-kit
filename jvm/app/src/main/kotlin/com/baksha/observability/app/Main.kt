@@ -1,7 +1,6 @@
 package com.baksha.observability.app
 
 import com.baksha.observability.core.span.SpanCapturing
-import com.baksha.observability.core.span.withSuspendingSpan
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
 import io.opentelemetry.extension.kotlin.asContextElement
@@ -11,6 +10,7 @@ import io.opentelemetry.sdk.resources.Resource
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.data.SpanData
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor
 import io.opentelemetry.sdk.trace.export.SpanExporter
 import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import kotlinx.coroutines.*
@@ -57,8 +57,10 @@ object SampleApp {
         val tracerProvider = SdkTracerProvider
             .builder()
             .setResource(resource)
-            .addSpanProcessor(BatchSpanProcessor.builder(jaegerExporter).build())
-            .addSpanProcessor(BatchSpanProcessor.builder(ConsoleSpanExporter()).build())
+            .addSpanProcessor(SimpleSpanProcessor.create(jaegerExporter))
+            .addSpanProcessor(SimpleSpanProcessor.create(ConsoleSpanExporter()))
+//            .addSpanProcessor(BatchSpanProcessor.builder(jaegerExporter).build())
+//            .addSpanProcessor(BatchSpanProcessor.builder(ConsoleSpanExporter()).build())
             .build()
 
         // Set up OpenTelemetry
@@ -73,37 +75,6 @@ object SampleApp {
 
 object ExampleSystem : SpanCapturing(SampleApp.tracer) {
     private val scope = CoroutineScope(Dispatchers.IO)
-
-    fun doSuspending() {
-        with(scope) {
-            launch {
-                withSuspendingSpanCapture("root") {
-                    withSpanCapture("root-sub") { }
-                    launch {
-                        withSuspendingSpanCapture("coroutine1-start") {
-                            withSuspendingSpanCapture("coroutine1-sub") {
-                                withSpanCapture("coroutine1-sub-1") {
-
-                                }
-                                withSuspendingSpanCapture("coroutine1-sub-2") {
-
-                                }
-                            }
-                            launch {
-                                withSuspendingSpanCapture("coroutine2-start") {
-                                    withSuspendingSpanCapture("coroutine2-sub") {
-                                        withSuspendingSpanCapture("coroutine2-sub-sub") {
-
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 
     fun demoLaunchContextLoss() = withSpanCapture("demoLaunchContextLoss") { rootSpan ->
         scope.launch {
@@ -169,11 +140,22 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
                 withSuspendingSpanCapture("withSuspendingSpanCapture.scope.launch+coroutineContext") {}
             }
         }
+
+    suspend fun throwingError(): Unit =
+        withSuspendingSpanCapture("withSuspendingSpanCapture") {
+            withSpanCapture("withSuspendingSpanCapture.withSpanCapture") {
+                "result"
+            }
+            runCatching {
+                withSuspendingSpanCaptureResult<String>("withSuspendingSpanCaptureResult") {
+                    throw Exception("withSuspendingSpanCaptureResultError")
+                }
+            }
+        }
 }
 
 fun main() = runBlocking {
     System.setProperty("otel.log.level", "DEBUG")
     ExampleSystem.moreDebugging()
-//    ExampleSystem.doSomething()
     delay(1_000_000)
 }
