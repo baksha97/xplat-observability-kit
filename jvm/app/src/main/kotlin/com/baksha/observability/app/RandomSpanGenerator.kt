@@ -1,11 +1,12 @@
 package com.baksha.observability.app
 
 import com.baksha.observability.core.trace.SpanCapturing
+import io.opentelemetry.api.trace.Tracer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
-object RandomSpanGenerator : SpanCapturing(SampleApp.tracer) {
+class RandomSpanGenerator(tracer: Tracer) : SpanCapturing(tracer) {
     // Recursively generate spans.
 // currentLevel: current depth in the span tree.
 // maxLevel: maximum allowed depth to prevent infinite recursion.
