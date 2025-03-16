@@ -104,7 +104,7 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
                         // Randomly decide between result-capturing or plain span capture for the child
                         if (Random.nextBoolean()) {
                             withSuspendingSpanCapture(childLabel) {
-                                withContext(Dispatchers.IO) {
+                                withContext(Dispatchers.Unconfined) {
                                     generateRandomSpans(currentLevel + 1, maxLevel, childLabel)
                                 }
                             }
@@ -155,7 +155,7 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
         // Start with an outer suspending span.
         withSuspendingSpanCapture("1. Outer Suspended Span") {
             // For example, generate spans up to a maximum depth of 5.
-            generateRandomSpans(currentLevel = 1, maxLevel = 5, labelPrefix = "Root")
+            generateRandomSpans(currentLevel = 1, maxLevel = 3, labelPrefix = "Root")
         }
     }
 }
