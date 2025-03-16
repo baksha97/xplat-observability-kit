@@ -5,9 +5,13 @@ ksp = "2.0.21-1.0.26"
 kotlin-poet = "2.0.0"
 mockk = "1.13.11"
 coroutines-test = "1.10.1"
+coroutines-core="1.10.1"
 
+opentelemetry-extension-kotlin="1.48.0"
 opentelemetry = "1.48.0"
-opentelemetry-alpha = "1.48.0-alpha"
+opentelemetry-alpha = "1.25.0-alpha"
+opentelemetry-exporter-jaeger="1.25.0"
+
 [libraries]
 kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlin" }
 
@@ -17,11 +21,19 @@ kotlin-poet = { group = "com.squareup", name = "kotlinpoet-ksp", version.ref = "
 
 # Testing
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
+kotlinx-coroutines = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines-core" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines-test" }
 
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
+
+
+opentelemetry-kotlin = { module = "io.opentelemetry:opentelemetry-extension-kotlin", version.ref = "opentelemetry-extension-kotlin" }
+
+opentelemetry-sdk = { module = "io.opentelemetry:opentelemetry-sdk", version.ref = "opentelemetry" }
+
+opentelemetry-semconv = { module = "io.opentelemetry:opentelemetry-semconv", version.ref = "opentelemetry-alpha" }
+opentelemetry-exporter-jaeger = { module = "io.opentelemetry:opentelemetry-exporter-jaeger", version.ref = "opentelemetry-exporter-jaeger" }
 opentelemetry-exporter-otlp = { module = "io.opentelemetry:opentelemetry-exporter-otlp", version.ref = "opentelemetry" }
-opentelemetry-api-incubator = { module = "io.opentelemetry:opentelemetry-api-incubator", version.ref = "opentelemetry-alpha" }
 
 [plugins]
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
