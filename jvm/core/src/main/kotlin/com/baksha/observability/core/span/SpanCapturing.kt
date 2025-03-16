@@ -157,9 +157,7 @@ suspend inline fun <T> withSpan(
         attributes.forEach(::setAttribute)
         startSpan()
     }
-    // TODO: Is it possible to persist coroutine context through `launch` uses?
-    val context = coroutineContext + Context.current().with(span).asContextElement()
-    return withContext(context) {
+    return withContext(span.asContextElement()) {
         try {
             block(span)
         }

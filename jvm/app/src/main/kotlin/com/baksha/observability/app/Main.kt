@@ -5,11 +5,14 @@ import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.common.CompletableResultCode
+import io.opentelemetry.sdk.resources.Resource
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.data.SpanData
 import io.opentelemetry.sdk.trace.export.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.export.SpanExporter
+import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import kotlinx.coroutines.*
+
 
 class ConsoleSpanExporter : SpanExporter {
     override fun export(spans: MutableCollection<SpanData>): CompletableResultCode {
@@ -35,19 +38,22 @@ object SampleApp {
 
     init {
         println("Initializing OpenTelemetry SDK...")
-
-//        val spansIngestUrl = "http://10.0.2.2:4318/v1/traces"
-//        val logsIngestUrl = "http://10.0.2.2:4318/v1/logs"
+        val resource = Resource
+            .builder()
+            .put(ResourceAttributes.SERVICE_NAME, "java-cli-app")
+            .build()
         val spansIngestUrl = "http://localhost:4318/v1/traces"
         val logsIngestUrl = "http://localhost:4318/v1/logs"
         // Set up Jaeger exporter
-        val jaegerExporter = OtlpHttpSpanExporter.builder()
+        val jaegerExporter = OtlpHttpSpanExporter
+            .builder()
             .setEndpoint(spansIngestUrl)
             .build()
 
         // Set up the tracer provider with the Jaeger exporter
         val tracerProvider = SdkTracerProvider
             .builder()
+            .setResource(resource)
             .addSpanProcessor(BatchSpanProcessor.builder(jaegerExporter).build())
             .addSpanProcessor(BatchSpanProcessor.builder(ConsoleSpanExporter()).build())
             .build()
@@ -57,25 +63,13 @@ object SampleApp {
             .builder()
             .setTracerProvider(tracerProvider)
             .buildAndRegisterGlobal()
-//        tracer = openTelemetry.tracerProvider.get("sample-app")
-        tracer = openTelemetry.tracerBuilder("sample=scope").build()
+
+        tracer = openTelemetry.tracerBuilder("com").build()
     }
 }
 
 object ExampleSystem : SpanCapturing(SampleApp.tracer) {
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-
-    fun doSomething() {
-        println(":doSomething:...")
-
-        withSpanCapture("do_something1") {
-            println("Doing 1")
-            withSpanCapture("do_something2") {
-                println("Doing 2")
-
-            }
-        }
-    }
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     fun doSuspending() {
         with(scope) {
