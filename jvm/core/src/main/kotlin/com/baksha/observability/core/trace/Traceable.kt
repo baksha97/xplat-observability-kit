@@ -1,4 +1,4 @@
-package com.baksha.observability.core.span
+package com.baksha.observability.core.trace
 
 /**
  * Used to apply to an interface to generate monitoring code & a tracing extension

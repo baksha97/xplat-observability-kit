@@ -329,7 +329,7 @@ class TestImplementation(
     }
 }
 
-class TestNested: TestInterface.Nested {
+private class TestNested: TestInterface.Nested {
     override var mutating: Int = 0
     override val sample: Int = 3
     override suspend fun resultSucceedingSuspendOperation(input: String): Result<String> {

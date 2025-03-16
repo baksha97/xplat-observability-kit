@@ -1,6 +1,6 @@
 package com.baksha.observability.app
 
-import com.baksha.observability.core.span.SpanCapturing
+import com.baksha.observability.core.trace.SpanCapturing
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.random.Random

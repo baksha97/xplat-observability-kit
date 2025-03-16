@@ -1,4 +1,4 @@
-package com.baksha.observability.core.span
+package com.baksha.observability.core.trace
 
 import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.processing.CodeGenerator
@@ -15,8 +15,9 @@ import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import java.io.OutputStreamWriter
 
-private const val TRACEABLE_ANNOTATION_FQN = "com.baksha.observability.core.span.Traceable"
-private const val SPAN_ANNOTATION_FQN = "com.baksha.observability.core.span.Traceable.Span"
+private const val TRACEABLE_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable"
+private const val SPAN_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable.Span"
+private const val SPAN_CAPTURING_PACKAGE = "com.baksha.observability.core.trace"
 private const val SPAN_CAPTURING_SIMPLE_NAME = "SpanCapturing"
 
 class TraceableProcessor(
@@ -49,7 +50,7 @@ class TraceableProcessor(
         val classBuilder = TypeSpec.classBuilder(proxyClassName)
             .addModifiers(KModifier.PRIVATE)
             .addSuperinterface(interfaceDecl.toClassName())
-            .superclass(ClassName(packageName = "com.baksha.observability.core.span", SPAN_CAPTURING_SIMPLE_NAME))
+            .superclass(ClassName(packageName = SPAN_CAPTURING_PACKAGE, SPAN_CAPTURING_SIMPLE_NAME))
 
         // Primary constructor: (underlying: Xyz, tracer: Tracer)
         val ctor = FunSpec.constructorBuilder()

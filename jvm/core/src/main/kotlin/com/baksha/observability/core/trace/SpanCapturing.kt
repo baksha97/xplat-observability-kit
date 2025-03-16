@@ -1,4 +1,4 @@
-package com.baksha.observability.core.span
+package com.baksha.observability.core.trace
 
 import io.opentelemetry.api.trace.Span
 import io.opentelemetry.api.trace.Tracer

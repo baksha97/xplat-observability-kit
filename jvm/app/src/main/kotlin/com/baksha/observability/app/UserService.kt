@@ -1,6 +1,6 @@
 package com.baksha.observability.app
 import com.baksha.observability.core.Monitor
-import com.baksha.observability.core.span.Traceable
+import com.baksha.observability.core.trace.Traceable
 import kotlin.random.Random
 
 
