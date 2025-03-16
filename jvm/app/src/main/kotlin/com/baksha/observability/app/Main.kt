@@ -14,6 +14,7 @@ import io.opentelemetry.sdk.trace.export.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.export.SpanExporter
 import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import kotlinx.coroutines.*
+import kotlin.coroutines.coroutineContext
 
 
 class ConsoleSpanExporter : SpanExporter {
@@ -159,6 +160,13 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
             scope.launch(rootContext.asContextElement()) {
                 withSpanCapture("withSpanCapture.scope.launch+rootContext") {}
                 withSuspendingSpanCapture("withSuspendingSpanCapture.scope.launch+rootContext") {}
+            }
+
+            // TEST: Does manually propagate it the way I expect it to work, work?....
+            // This works too... Looks like launch doesn't propagate the context.
+            scope.launch(coroutineContext) {
+                withSpanCapture("withSpanCapture.scope.launch+coroutineContext") {}
+                withSuspendingSpanCapture("withSuspendingSpanCapture.scope.launch+coroutineContext") {}
             }
         }
 }
