@@ -16,6 +16,7 @@ import com.squareup.kotlinpoet.ksp.toTypeName
 import java.io.OutputStreamWriter
 
 private const val TRACEABLE_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable"
+private const val IGNORE_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable.Ignore"
 private const val SPAN_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable.Span"
 private const val SPAN_CAPTURING_PACKAGE = "com.baksha.observability.core.trace"
 private const val SPAN_CAPTURING_SIMPLE_NAME = "SpanCapturing"
@@ -125,7 +126,7 @@ class TraceableProcessor(
      */
     private fun generateMethodProxy(function: KSFunctionDeclaration, classBuilder: TypeSpec.Builder) {
         val funName = function.simpleName.asString()
-
+        val paramNames = function.parameters.joinToString(", ") { it.name?.asString().orEmpty() }
         val methodBuilder = FunSpec.builder(funName)
             .addModifiers(KModifier.OVERRIDE)
 
@@ -138,18 +139,28 @@ class TraceableProcessor(
 
         // Determine return type
         val returnType = function.returnType?.resolve()
-        if (returnType != null) methodBuilder.returns(returnType.toTypeName())
+        if (returnType != null) {
+            methodBuilder.returns(returnType.toTypeName())
+        }
 
-        // Check if suspend, and if returns kotlin.Result
+        // If suspend, add that modifier
         val isSuspend = Modifier.SUSPEND in function.modifiers
-        if (isSuspend) methodBuilder.addModifiers(KModifier.SUSPEND)
+        if (isSuspend) {
+            methodBuilder.addModifiers(KModifier.SUSPEND)
+        }
 
+        // ----- Check @Ignore -----
+        if (isIgnored(function)) {
+            // Just pass through
+            methodBuilder.addCode("return underlying.$funName($paramNames)")
+            classBuilder.addFunction(methodBuilder.build())
+            return
+        }
+
+        // ----- Otherwise, do the existing span capture logic -----
         val returnsResult = (returnType?.declaration?.qualifiedName?.asString() == "kotlin.Result")
-
-        // Extract annotation info from @Traceable.Span
         val (spanName, captureParams, additionalAttrs) = extractSpanData(function)
 
-        // Figure out the correct capturing function name
         val captureFunctionName = when {
             isSuspend && returnsResult -> "withSuspendingSpanCaptureResult"
             isSuspend                  -> "withSuspendingSpanCapture"
@@ -157,27 +168,19 @@ class TraceableProcessor(
             else                       -> "withSpanCapture"
         }
 
-        // Build the argument list for underlying method
-        val paramNames = function.parameters.joinToString(", ") { it.name?.asString().orEmpty() }
-
-        // Decide whether to generate the short form or the long form
         val needsLambdaParam = captureParams.isNotEmpty() || additionalAttrs.isNotEmpty()
         val codeBlock = if (!needsLambdaParam) {
-            // No captured attributes -> short form
             """
-            return $captureFunctionName("$spanName") {
-                underlying.$funName($paramNames)
-            }
-            """.trimIndent()
+        return $captureFunctionName("$spanName") {
+            underlying.$funName($paramNames)
+        }
+        """.trimIndent()
         } else {
-            // We have attributes to set -> long form with `span ->`
             buildString {
                 appendLine("return $captureFunctionName(\"$spanName\") { span ->")
-                // For each captureParam, call: span.setAttribute("name", name.toString())
                 captureParams.forEach { capturedParam ->
                     appendLine("    span.setAttribute(\"$capturedParam\", $capturedParam.toString())")
                 }
-                // For each additionalAttr, call: span.setAttribute("attr", underlying.attr.toString())
                 additionalAttrs.forEach { attr ->
                     appendLine("    span.setAttribute(\"$attr\", underlying.$attr.toString())")
                 }
@@ -252,6 +255,12 @@ class TraceableProcessor(
         }
 
         classBuilder.addProperty(propBuilder.build())
+    }
+
+    private fun isIgnored(function: KSFunctionDeclaration): Boolean {
+        return function.annotations.any {
+            it.annotationType.resolve().declaration.qualifiedName?.asString() == IGNORE_ANNOTATION_FQN
+        }
     }
 
     /**

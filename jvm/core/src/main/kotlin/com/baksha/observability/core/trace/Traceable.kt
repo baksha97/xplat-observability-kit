@@ -16,5 +16,8 @@ annotation class Traceable {
         // Additional context to be provided from the instance attribute's live value
         val additionalContextFromAttributes: Array<String> = [],
     )
-}
 
+    @Target(AnnotationTarget.FUNCTION)
+    @Retention(AnnotationRetention.RUNTIME)
+    annotation class Ignore
+}

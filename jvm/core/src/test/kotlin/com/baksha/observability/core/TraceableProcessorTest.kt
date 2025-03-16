@@ -43,7 +43,7 @@ interface SomeService {
     @Traceable.Span(name = "successfulSuspendOperation")
     suspend fun successfulSuspendOperation(input: String): String
 
-    // Fallback to function name
+    @Traceable.Ignore
     fun failingOperation(exception: Exception): String
     suspend fun failingSuspendOperation(exception: Exception): String
 
@@ -184,7 +184,7 @@ class TraceableProcessorTest {
     }
 
     @Test
-    fun `test failing operation is traced`() {
+    fun `test failing operation is ignored (no span created)`() {
         val real = SomeServiceImpl(SomeServiceImpl.NestedImpl(), SomeServiceImpl.NestedImpl())
         val sut = real.traced(tracer)
 
@@ -199,15 +199,8 @@ class TraceableProcessorTest {
         }
 
         val spans = inMemoryExporter.getFinishedSpans()
-        assertEquals(1, spans.size)
-        val span = spans.first()
-        // Fallback to method name
-        assertEquals("failingOperation", span.name)
-        assertEquals(StatusCode.ERROR, span.status.statusCode)
-
-        // Check that exception event is recorded
-        val exceptionEvent = span.events.firstOrNull { it.name == "exception" }
-        assertNotNull(exceptionEvent, "Should record an exception event for a failing call")
+        // Since failingOperation is @Traceable.Ignore, we expect zero spans:
+        assertTrue(spans.isEmpty(), "No spans should be captured for an ignored function")
     }
 
     /* -------------------------------------------------------
