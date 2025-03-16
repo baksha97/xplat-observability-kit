@@ -55,7 +55,7 @@ interface UserService {
     @Traceable.Span(
         name = "getUser_demo",
         captureParameters = ["id"],
-        additionalContextFromAttributes = ["sample"]
+        additionalContextFromAttributes = ["mutating", "nestedRequired", "nestedOptional"]
     )
     fun getUser(id: String): String
 

@@ -79,5 +79,6 @@ fun main(): Unit = runBlocking {
     val userService = UserServiceImpl(TestNested(), TestNested())
         .traced(SampleApp.tracer)
     userService.resultFailingSuspendOperation(Exception("Error, World!"))
+    userService.getUser("test")
     delay(1000)
 }
