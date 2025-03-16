@@ -9,13 +9,11 @@ import io.opentelemetry.sdk.common.CompletableResultCode
 import io.opentelemetry.sdk.resources.Resource
 import io.opentelemetry.sdk.trace.SdkTracerProvider
 import io.opentelemetry.sdk.trace.data.SpanData
-import io.opentelemetry.sdk.trace.export.BatchSpanProcessor
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor
 import io.opentelemetry.sdk.trace.export.SpanExporter
 import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
 import kotlinx.coroutines.*
 import kotlin.coroutines.coroutineContext
-
 
 class ConsoleSpanExporter : SpanExporter {
     override fun export(spans: MutableCollection<SpanData>): CompletableResultCode {
@@ -141,14 +139,123 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
             }
         }
 
-    suspend fun throwingError(): Unit =
-        withSuspendingSpanCapture("withSuspendingSpanCapture") {
-            withSpanCapture("withSuspendingSpanCapture.withSpanCapture") {
-                "result"
-            }
+    suspend fun complexSpanTestAll(): Unit =
+        withSuspendingSpanCapture("1. Outer Suspended Span") {
+            // Branch A: Sibling non-suspending spans (using withSpanCapture and withSpanCaptureResult)
+            // They run in a non-suspending context and do not call any suspend functions.
             runCatching {
-                withSuspendingSpanCaptureResult<String>("withSuspendingSpanCaptureResult") {
-                    throw Exception("withSuspendingSpanCaptureResultError")
+                withSpanCapture("A.1 NonSuspending Span 1") {
+                    // Non-suspending work.
+                }
+                withSpanCaptureResult<Unit>("A.2 NonSuspending Span Result 2") {
+                    // Simulate an error.
+                    throw Exception("Error in non-suspending span result 2")
+                }
+            }
+
+            // Branch B: Nested suspending spans using withSuspendingSpanCapture and withSuspendingSpanCaptureResult
+            // All nested calls here are suspending, so deeper layers can be built.
+            runCatching {
+                withSuspendingSpanCapture("B.1 Suspending Span Level 1") {
+                    withSuspendingSpanCaptureResult<Unit>("B.2 Suspending Span Result Level 2") {
+                        withSuspendingSpanCapture("B.3 Suspending Span Level 3") {
+                            runCatching {  }
+                        }
+                    }
+                }
+            }
+
+            // Branch C: Within a suspending span, add siblings that are non-suspending.
+            runCatching {
+                withSuspendingSpanCapture<Unit>("C.1 Suspending Span Level 1") {
+                    // Sibling non-suspending span.
+                    withSpanCapture("C.1.1 NonSuspending Sibling Span") {
+                        // Do some non-suspending work.
+                    }
+                    // Another non-suspending sibling that throws an error.
+                    withSpanCaptureResult<String>("C.1.2 NonSuspending Result Sibling Span") {
+                        runCatching { throw Exception("Error in NonSuspending Result Sibling Span") }
+                    }
+                }
+            }
+
+            // Branch D: Mixed siblings in a suspending span-result block.
+            // Here, we first use a non-suspending sibling, then a suspending one.
+            runCatching<Unit>{
+                withSuspendingSpanCaptureResult<Unit>("D.1 Suspending Span Result Level 1") {
+                    // Non-suspending sibling.
+                    withSpanCapture("D.2 NonSuspending Sibling") {
+                        // Non-suspending work.
+                    }
+                    withSpanCaptureResult<String>("D.2.5 NonSuspending Result Sibling Span") {
+                        runCatching { throw Exception("Error in NonSuspending Result Sibling Span") }
+                    }
+                    // Suspending sibling.
+                    withSuspendingSpanCapture("D.3 Suspending Sibling") {
+                        // Within this suspending block, add a non-suspending sibling.
+                        withSpanCapture("D.3.1 NonSuspending Sibling inside Suspended Block") {
+                            // Non-suspending work.
+                        }
+                        withSpanCaptureResult<String>("D.3.5 NonSuspending Result Sibling Span") {
+                            runCatching { throw Exception("Error in NonSuspending Result Sibling Span") }
+                        }
+                        // And then a deeper suspending span that throws an error.
+                        withSuspendingSpanCapture("D.3.2 Nested Suspended Span") {
+                            runCatching {  }
+//                            throw Exception("Error in Nested Suspended Span in D.3.2")
+                        }
+                    }
+                }
+            }
+
+            // Branch E: 10-level deep chain of suspending spans (using only suspending functions)
+            runCatching {
+                withSuspendingSpanCapture<Unit>("E.1 Level 1") {
+                    withSuspendingSpanCapture("E.2 Level 2") {
+                        withSuspendingSpanCapture("E.3 Level 3") {
+                            withSuspendingSpanCapture("E.4 Level 4") {
+                                withSuspendingSpanCapture("E.5 Level 5") {
+                                    withSuspendingSpanCapture("E.6 Level 6") {
+                                        withSuspendingSpanCapture("E.7 Level 7") {
+                                            withSuspendingSpanCapture("E.8 Level 8") {
+                                                withSuspendingSpanCapture("E.9 Level 9") {
+                                                    withSuspendingSpanCapture("E.10 Level 10") {
+                                                        Unit
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Branch F: 10-level deep chain of non-suspending spans using withSpanCapture and withSpanCaptureResult.
+            // Since these are non-suspending blocks, they only call non-suspending functions.
+            runCatching {
+                withSpanCapture<Unit>("F.1 NonSuspending Level 1") {
+                    withSpanCaptureResult("F.2 NonSuspending Level 2") {
+                        withSpanCapture("F.3 NonSuspending Level 3") {
+                            withSpanCaptureResult("F.4 NonSuspending Level 4") {
+                                withSpanCapture("F.5 NonSuspending Level 5") {
+                                    withSpanCaptureResult("F.6 NonSuspending Level 6") {
+                                        withSpanCapture("F.7 NonSuspending Level 7") {
+                                            withSpanCaptureResult("F.8 NonSuspending Level 8") {
+                                                withSpanCapture("F.9 NonSuspending Level 9") {
+                                                    withSpanCaptureResult("F.10 NonSuspending Level 10") {
+                                                        runCatching { }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -156,6 +263,6 @@ object ExampleSystem : SpanCapturing(SampleApp.tracer) {
 
 fun main() = runBlocking {
     System.setProperty("otel.log.level", "DEBUG")
-    ExampleSystem.moreDebugging()
+    ExampleSystem.demoLaunchContextLoss()
     delay(1_000_000)
 }

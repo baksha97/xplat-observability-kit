@@ -8,9 +8,6 @@ import io.opentelemetry.extension.kotlin.asContextElement
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
-import kotlin.coroutines.cancellation.CancellationException
-
-val isSpanErrorTrackingException: (Throwable) -> Boolean = { it !is CancellationException }
 
 /**
  * Provides functionality for capturing execution metrics (duration and errors)
@@ -35,8 +32,8 @@ abstract class SpanCapturing(val tracer: Tracer) {
         crossinline block: (Span) -> T
     ): T =
         withSpan(tracer, key, attributes) {
-             block(it)
-        }
+            runCatching { block(it) }
+        }.getOrThrow()
 
     /**
      * Captures a synchronous operation that returns a [Result].
@@ -64,14 +61,14 @@ abstract class SpanCapturing(val tracer: Tracer) {
      * @return The result of the operation.
      * @throws Throwable Rethrows any exception thrown by [block].
      */
-    suspend inline fun <T> withSuspendingSpanCapture(
+    suspend inline fun <reified T> withSuspendingSpanCapture(
         key: String,
         attributes: Map<String, String> = emptyMap(),
         crossinline block: suspend (Span) -> T
     ): T  =
         withSuspendingSpan(tracer, key, attributes) {
-             block(it)
-        }
+            runCatching { block(it) }
+        }.getOrThrow()
 
     /**
      * Captures a suspending operation that returns a [Result].
@@ -105,8 +102,8 @@ inline fun <T> withSpan(
     tracer: Tracer,
     spanName: String,
     attributes: Map<String, String> = emptyMap(),
-    crossinline block: (Span) -> T
-): T {
+    crossinline block: (Span) -> Result<T>
+): Result<T> {
     val parent: Context = Context.current()
 
     val span = tracer
@@ -118,17 +115,14 @@ inline fun <T> withSpan(
         }
 
     span.makeCurrent().use {
-        try {
-            return block(span)
-        }
-        catch (throwable: Throwable) {
-            span.setStatus(StatusCode.ERROR)
-            span.recordException(throwable)
-            throw throwable
-        }
-        finally {
-            span.end()
-        }
+        val result = block(span)
+        span.setStatus(
+            if (result.isSuccess) StatusCode.OK
+            else StatusCode.ERROR
+        )
+        result.exceptionOrNull()?.let { span.recordException(it) }
+        span.end()
+        return result
     }
 }
 
@@ -138,23 +132,20 @@ suspend inline fun <T> withSuspendingSpan(
     spanName: String,
     attributes: Map<String, String> = emptyMap(),
     coroutineContext: CoroutineContext = EmptyCoroutineContext,
-    crossinline block: suspend (span: Span) -> T
-): T {
+    crossinline block: suspend (span: Span) -> Result<T>
+): Result<T> {
     val span: Span = tracer.spanBuilder(spanName).run {
         attributes.forEach(::setAttribute)
         startSpan()
     }
     return withContext(coroutineContext + span.asContextElement()) {
-        try {
-            block(span)
-        }
-        catch (throwable: Throwable) {
-            span.setStatus(StatusCode.ERROR)
-            span.recordException(throwable)
-            throw throwable
-        }
-        finally {
-            span.end()
-        }
+        val result = block(span)
+        span.setStatus(
+            if (result.isSuccess) StatusCode.OK
+            else StatusCode.ERROR
+        )
+        result.exceptionOrNull()?.let { span.recordException(it) }
+        span.end()
+        return@withContext result
     }
 }
