@@ -33,7 +33,7 @@ interface SomeService {
     @Traceable.Span(
         name = "validateCredentialszz",
         captureParameters = ["username", "password"],
-        additionalContextFromAttributes = ["sample"]
+        additionalContextFromAttributes = ["sample", "nestedOptional"]
     )
     fun validateCredentials(username: String, password: String): Result<Boolean>
 
