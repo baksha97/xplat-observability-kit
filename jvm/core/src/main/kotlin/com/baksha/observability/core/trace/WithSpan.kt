@@ -23,14 +23,7 @@ inline fun <T> withSpan(
     attributes: Map<String, String> = emptyMap(),
     crossinline block: (Span) -> Result<T>
 ): Result<T> {
-    val span = tracer
-        .spanBuilder(spanName)
-        .setParent(Context.current())
-        .run {
-            attributes.forEach(::setAttribute)
-            startSpan()
-        }
-
+    val span: Span = startSpan(tracer, spanName, attributes)
     span.makeCurrent().use {
         return extractEventsInto(span) { block(span) }
     }
@@ -44,26 +37,35 @@ suspend inline fun <T> withSuspendingSpan(
     coroutineContext: CoroutineContext = EmptyCoroutineContext,
     crossinline block: suspend (span: Span) -> Result<T>
 ): Result<T> {
-    val span: Span = tracer.spanBuilder(spanName).run {
-        attributes.forEach(::setAttribute)
-        startSpan()
-    }
+    val span: Span = startSpan(tracer, spanName, attributes)
     return withContext(coroutineContext + span.asContextElement()) {
         return@withContext extractEventsInto(span) { block(span) }
     }
 }
 
 
+fun startSpan(
+    tracer: Tracer,
+    spanName: String,
+    attributes: Map<String, String> = emptyMap(),
+): Span {
+    val span: Span = tracer
+        .spanBuilder(spanName)
+        .setParent(Context.current())
+        .also { attributes.forEach(it::setAttribute) }
+        .startSpan()
+    return span
+}
+
 inline fun <T> extractEventsInto(
     span: Span,
     block: (span: Span) -> Result<T>
-): Result<T> {
-    val result = block(span)
-    span.setStatus(
-        if (result.isSuccess) StatusCode.OK
-        else StatusCode.ERROR
-    )
-    result.exceptionOrNull()?.let { span.recordException(it) }
-    span.end()
-    return result
-}
+): Result<T> =
+    block(span).also {
+        span.setStatus(
+            if (it.isSuccess) StatusCode.OK
+            else StatusCode.ERROR
+        )
+        it.exceptionOrNull()?.let { e -> span.recordException(e) }
+        span.end()
+    }

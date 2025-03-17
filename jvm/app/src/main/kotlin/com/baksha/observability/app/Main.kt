@@ -101,7 +101,7 @@ suspend fun drawManualSpansNested(capture: SpanCapturing) = with(capture) {
 
 
 fun main() = runBlocking {
-    drawManualSpansNested(DefaultCapturing)
+    drawManualSpans(DefaultCapturing)
 //    val generator = RandomSpanGenerator(tracer)
 //    generator.complexSpanTestRandom()
     delay(30.seconds)
