@@ -1,4 +1,4 @@
-package com.baksha.observability.core.logging
+package com.baksha.observability.core.log
 
 /**
  * A Logger interface with Lazy message evaluation example:

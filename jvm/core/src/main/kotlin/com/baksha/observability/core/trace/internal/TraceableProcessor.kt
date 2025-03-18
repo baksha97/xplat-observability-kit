@@ -1,4 +1,4 @@
-package com.baksha.observability.core.trace
+package com.baksha.observability.core.trace.internal
 
 import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.processing.CodeGenerator
@@ -18,8 +18,8 @@ import java.io.OutputStreamWriter
 private const val TRACEABLE_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable"
 private const val IGNORE_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable.Ignore"
 private const val SPAN_ANNOTATION_FQN = "com.baksha.observability.core.trace.Traceable.Span"
-private const val SPAN_CAPTURING_PACKAGE = "com.baksha.observability.core.trace"
-private const val SPAN_CAPTURING_SIMPLE_NAME = "SpanCapturing"
+private const val SPAN_CAPTURING_PACKAGE = "com.baksha.observability.core.trace.internal"
+private const val SPAN_CAPTURING_SIMPLE_NAME = "ProxySpanCapturing"
 
 class TraceableProcessor(
     private val codeGenerator: CodeGenerator,

@@ -1,4 +1,4 @@
-package com.baksha.observability.core
+package com.baksha.observability.core.collect.internal
 
 import com.google.devtools.ksp.getDeclaredFunctions
 import com.google.devtools.ksp.processing.CodeGenerator
@@ -27,20 +27,20 @@ import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.toTypeName
 import java.io.OutputStreamWriter
 
-private const val ANNOTATION_FQN = "com.baksha.observability.core.Monitor.Collectable"
-private const val FUNCTION_ANNOTATION_FQN = "com.baksha.observability.core.Monitor.Function"
-private const val COLLECTOR_SIMPLE_TYPE = "Monitor.Collector"
-private const val DEFAULT_COLLECTOR_SIMPLE_TYPE = "Monitor.Collectors.Printer"
-private const val COMPOSITE_COLLECTOR_SIMPLE_TYPE = "Monitor.Collectors.Composite"
+private const val ANNOTATION_FQN = "com.baksha.observability.core.collect.Collectable"
+private const val FUNCTION_ANNOTATION_FQN = "com.baksha.observability.core.collect.Collectable.Function"
+private const val COLLECTOR_SIMPLE_TYPE = "Collector"
+private const val DEFAULT_COLLECTOR_SIMPLE_TYPE = "Collector.console"
+private const val COMPOSITE_COLLECTOR_SIMPLE_TYPE = "Collector.composite"
 
 private const val PACKAGE = "com.baksha.observability.core"
 
-internal class MonitorableProcessor(
+internal class CollectableProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger
 ) : SymbolProcessor {
     override fun process(resolver: Resolver): List<KSAnnotated> {
-        logger.info("MonitorableProcessor running")
+        logger.info("CollectableProcessor running")
 
         val symbols = resolver.getSymbolsWithAnnotation(ANNOTATION_FQN)
         logger.info("Found ${symbols.count()} symbols with @$ANNOTATION_FQN")
@@ -80,7 +80,7 @@ internal class MonitorableProcessor(
         val classBuilder = TypeSpec.classBuilder(proxyClassName)
             .addModifiers(KModifier.PRIVATE)
             .addSuperinterface(declaration.toClassName())
-            .superclass(ClassName(PACKAGE, "Capturing"))
+            .superclass(ClassName(PACKAGE, "ProxyEventCollecting"))
 
         // Create constructor that directly calls super constructor with collector
         val constructorBuilder = FunSpec.constructorBuilder()
@@ -134,8 +134,8 @@ internal class MonitorableProcessor(
         val extensionFunVararg = createExtensionVarargFunction(declaration.toClassName(), proxyClassName)
 
         val file = FileSpec.builder(packageName, proxyClassName)
-            .addImport(PACKAGE, "Monitor")
-            .addImport(PACKAGE, "Capturing")
+            .addImport(PACKAGE, "collect.Collector")
+            .addImport(PACKAGE, "collect.internal.ProxyEventCollecting")
             .addType(classBuilder.build())
             .addFunction(extensionFun)
             .addFunction(extensionFunVararg)
@@ -303,10 +303,10 @@ internal class MonitorableProcessor(
     }
 }
 
-internal class MonitorableProcessorProvider : SymbolProcessorProvider {
+internal class CollectableProcessorProvider : SymbolProcessorProvider {
     override fun create(
         environment: SymbolProcessorEnvironment
     ): SymbolProcessor {
-        return MonitorableProcessor(environment.codeGenerator, environment.logger)
+        return CollectableProcessor(environment.codeGenerator, environment.logger)
     }
 }

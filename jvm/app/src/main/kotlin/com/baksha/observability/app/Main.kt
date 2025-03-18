@@ -1,6 +1,6 @@
 package com.baksha.observability.app
 
-import com.baksha.observability.core.trace.SpanCapturing
+import com.baksha.observability.core.trace.internal.ProxySpanCapturing
 import io.opentelemetry.api.trace.Tracer
 import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
 import io.opentelemetry.sdk.OpenTelemetrySdk
@@ -42,7 +42,7 @@ val tracer: Tracer = run {
     openTelemetry.tracerBuilder("com").build()
 }
 
-object DefaultCapturing : SpanCapturing(tracer)
+object DefaultCapturingProxy : ProxySpanCapturing(tracer)
 
 fun debugUserService(): Unit = runBlocking {
     val userService = UserServiceImpl(TestNested(), TestNested())
@@ -53,12 +53,12 @@ fun debugUserService(): Unit = runBlocking {
 }
 
 fun generateRandomSpans() = runBlocking {
-    val generator = RandomSpanGenerator(tracer)
+    val generator = RandomProxySpanGenerator(tracer)
     generator.complexSpanTestRandom()
     delay(30.seconds)
 }
 
-suspend fun drawManualSpans(capture: SpanCapturing) = with(capture) {
+suspend fun drawManualSpans(capture: ProxySpanCapturing) = with(capture) {
     withSuspendingSpanCapture("suspend1") {
         withSuspendingSpanCapture("suspend1.suspend1") { }
         withSpanCapture("suspend1.sync1") { }
@@ -79,7 +79,7 @@ suspend fun drawManualSpans(capture: SpanCapturing) = with(capture) {
     }
 }
 
-suspend fun drawManualSpansNested(capture: SpanCapturing) = with(capture) {
+suspend fun drawManualSpansNested(capture: ProxySpanCapturing) = with(capture) {
     drawManualSpans(capture)
     drawManualSpans(capture)
     drawManualSpans(capture)
@@ -101,7 +101,7 @@ suspend fun drawManualSpansNested(capture: SpanCapturing) = with(capture) {
 
 
 fun main() = runBlocking {
-    drawManualSpans(DefaultCapturing)
+    drawManualSpans(DefaultCapturingProxy)
 //    val generator = RandomSpanGenerator(tracer)
 //    generator.complexSpanTestRandom()
     delay(30.seconds)

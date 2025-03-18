@@ -1,4 +1,4 @@
-package com.baksha.observability.core.trace
+package com.baksha.observability.core.trace.internal
 
 import io.opentelemetry.api.trace.Span
 import io.opentelemetry.api.trace.Tracer
@@ -10,7 +10,7 @@ import io.opentelemetry.api.trace.Tracer
  * This class supports both synchronous and suspending operations,
  * as well as functions that throw exceptions or return a [Result].
  */
-abstract class SpanCapturing(val tracer: Tracer) {
+abstract class ProxySpanCapturing(val tracer: Tracer) {
     /**
      * Captures a synchronous operation that may throw an exception.
      *

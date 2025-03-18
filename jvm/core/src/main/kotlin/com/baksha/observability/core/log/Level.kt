@@ -1,4 +1,4 @@
-package com.baksha.observability.core.logging
+package com.baksha.observability.core.log
 
 public sealed class Level {
     public data object Trace: Level()

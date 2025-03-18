@@ -1,4 +1,4 @@
-package com.baksha.observability.core.logging
+package com.baksha.observability.core.log
 
 /**
  * We can optionally handle messages that throw errors, but for now we will expect this not to occur

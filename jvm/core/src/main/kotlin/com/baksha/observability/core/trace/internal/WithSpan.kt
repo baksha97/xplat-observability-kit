@@ -1,4 +1,4 @@
-package com.baksha.observability.core.trace
+package com.baksha.observability.core.trace.internal
 
 import io.opentelemetry.api.trace.Span
 import io.opentelemetry.api.trace.StatusCode
@@ -42,10 +42,6 @@ suspend inline fun <T> withSuspendingSpan(
     }
 }
 
-/**
- * Internal helpers that cannot be private due to Kotlin's visibility rules and usage in
- * inline functions.
- */
 fun startSpan(
     tracer: Tracer,
     spanName: String,

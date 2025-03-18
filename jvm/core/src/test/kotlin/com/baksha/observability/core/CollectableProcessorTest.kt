@@ -1,5 +1,7 @@
 package com.baksha.observability.core
 
+import com.baksha.observability.core.collect.Collectable
+import com.baksha.observability.core.collect.Collector
 import kotlinx.coroutines.test.runTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -238,18 +240,18 @@ class MonitorableProcessorTest {
     }
 }
 
-class TestCollector : Monitor.Collector {
-    private val _collectedData = mutableListOf<Monitor.Data>()
+class TestCollector : Collector {
+    private val _collectedData = mutableListOf<Collector.Data>()
 
-    val collectedData: List<Monitor.Data>
+    val collectedData: List<Collector.Data>
         get() = _collectedData
 
-    override fun collect(data: Monitor.Data) {
+    override fun collect(data: Collector.Data) {
         _collectedData.add(data)
     }
 }
 
-@Monitor.Collectable
+@Collectable
 interface TestInterface {
     var mutating: Int
 
@@ -258,10 +260,10 @@ interface TestInterface {
     val nestedRequired: Nested
     val nestedOptional: Nested?
 
-    @Monitor.Function("successful_operation")
+    @Collectable.Function("successful_operation")
     fun successfulOperation(input: String): String
 
-    @Monitor.Function("successful_suspend_operation")
+    @Collectable.Function("successful_suspend_operation")
     suspend fun successfulSuspendOperation(input: String): String
 
     fun failingOperation(exception: Exception): String
@@ -272,17 +274,17 @@ interface TestInterface {
 
     suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
 
-    @Monitor.Function("result_failed_op")
+    @Collectable.Function("result_failed_op")
     fun resultFailingOperation(exception: Exception): Result<String>
 
-    @Monitor.Function("result_failed_suspend_op")
+    @Collectable.Function("result_failed_suspend_op")
     suspend fun resultFailingSuspendOperation(exception: Exception): Result<String>
 
-    @Monitor.Collectable
+    @Collectable
     interface Nested {
         var mutating: Int
         val sample: Int?
-        @Monitor.Function("nested_result_successful_suspend_op")
+        @Collectable.Function("nested_result_successful_suspend_op")
         suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
     }
 }

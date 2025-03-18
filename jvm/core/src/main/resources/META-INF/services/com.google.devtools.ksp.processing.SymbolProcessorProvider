@@ -1,2 +1,2 @@
-com.baksha.observability.core.MonitorableProcessorProvider
-com.baksha.observability.core.trace.TraceableProcessorProvider
+com.baksha.observability.core.collect.internal.CollectableProcessorProvider
+com.baksha.observability.core.trace.internal.TraceableProcessorProvider
