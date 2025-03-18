@@ -31,7 +31,7 @@ interface SomeService {
 
     // Another function with custom name
     @Traceable.Span(
-        name = "validateCredentialszz",
+        name = "validateCredential",
         captureParameters = ["username", "password"],
         additionalContextFromAttributes = ["sample", "nestedOptional"]
     )

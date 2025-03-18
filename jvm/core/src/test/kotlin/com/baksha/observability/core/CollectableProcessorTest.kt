@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 /**
  * These tests ignore durationMs since actually testing that is tricky.
  */
-class MonitorableProcessorTest {
+class CollectableProcessorTest {
     private lateinit var collector: TestCollector
     private lateinit var sut: TestInterface
 
