@@ -1,61 +1,103 @@
-# Monitorable - Functional Method Monitoring for Kotlin
+# Monitorable – Functional Method Monitoring & Tracing for Kotlin
 
-A lightweight, zero-reflection approach to method monitoring in Kotlin using KSP (Kotlin Symbol Processing).
+A lightweight, zero-reflection approach to method monitoring **and tracing** in Kotlin using KSP (Kotlin Symbol Processing).
 
 ## Overview
 
-Monitorable provides simple but powerful method monitoring through compile-time code generation, featuring:
+Monitorable provides simple but powerful **monitoring** and **tracing** through compile-time code generation, featuring:
 - Zero runtime reflection
 - Compile-time generation
 - Built-in error handling
 - Composable collectors
 - Minimal runtime overhead
 
-## Usage
+In addition to monitoring via `@Monitor`, you can optionally add **OpenTelemetry-based tracing** via `@Traceable`, with **no** additional runtime reflection or overhead.
 
-1. Add the Monitor annotation to your interface:
-```kotlin
-@Monitor.Collectable
-interface AuthService {
-    @Monitor.Function(name = "auth_user_get")
-    fun getUser(): String
-    
-    @Monitor.Function(name = "auth_result_get")
-    fun getResult(): Result<String>
-}
-```
+## Usage (Monitoring)
 
-2. Use the generated monitored extension:
-```kotlin
-// Single collector
-val service = authService.monitored(Monitor.Collectors.Printer())
+1. **Add the Monitor annotation** to your interface:
+   ```kotlin
+   @Monitor.Collectable
+   interface AuthService {
+       @Monitor.Function(name = "auth_user_get")
+       fun getUser(): String
+       
+       @Monitor.Function(name = "auth_result_get")
+       fun getResult(): Result<String>
+   }
+   ```
 
-// Multiple collectors
-val service = authService.monitored(
-    Monitor.Collectors.Printer(),
-    MetricsCollector()
-)
-```
+2. **Use the generated monitored extension**:
+   ```kotlin
+   // Single collector
+   val service = authService.monitored(Monitor.Collectors.Printer())
+   
+   // Multiple collectors
+   val service = authService.monitored(
+       Monitor.Collectors.Printer(),
+       MetricsCollector()
+   )
+   ```
+
+## Usage (Tracing)
+
+In parallel to—or instead of—monitoring, you can enable **tracing** for your interface using the `@Traceable` annotation. This generates OpenTelemetry-based **spans** around each method call:
+
+1. **Annotate your interface with `@Traceable`**:
+   ```kotlin
+   @Traceable
+   interface UserRepository {
+       // For a default span name matching the method
+       fun findById(id: String): User
+       
+       // Customize the span name, capture parameters, etc.
+       @Traceable.Span(name = "create-user", captureParameters = ["username"])
+       fun createUser(username: String, email: String): User
+       
+       // Skip tracing for certain methods entirely
+       @Traceable.Ignore
+       fun localCacheRefresh()
+   }
+   ```
+
+2. **Use the generated `traced` extension** by providing a Tracer:
+   ```kotlin
+   import io.opentelemetry.api.trace.Tracer
+
+   val tracer: Tracer = // Obtain or build an OpenTelemetry tracer
+   val userRepo = actualUserRepo.traced(tracer)
+
+   // Calls to userRepo methods now automatically create and manage spans
+   val user = userRepo.findById("123")
+   ```
+
+### How `@Traceable` Works
+
+- **`@Traceable` at the interface level**: Tells the KSP processor to generate a “spanning proxy.”
+- **`@Traceable.Span` at the method level**: Customizes the span’s name and captures attributes like method parameters or additional fields.
+- **`@Traceable.Ignore`**: Explicitly **skips** span capture for the method, delegating calls directly to the underlying implementation.
 
 ## Features
 
 ### Built-in Error Handling
 
-Monitorable handles both regular exceptions and Result-wrapped returns:
+Monitorable (and `@Traceable`) handles both regular exceptions and `Result`-wrapped returns:
 ```kotlin
 @Monitor.Collectable
+@Traceable
 interface UserService {
-    // Regular methods - exceptions are caught and reported
+    // Regular methods - exceptions are caught and reported or traced
     @Monitor.Function(name = "get_user")
     fun getUser(id: String): String
     
-    // Result-returning methods - failures are tracked
+    // Result-returning methods - failures are tracked or traced
+    @Traceable.Span(name = "validate-user")
     @Monitor.Function(name = "validate_user")
     fun validateUser(user: User): Result<Boolean>
 }
 ```
 
-### Simple Collector Interface
+### Simple Collector Interface (Monitoring)
 
 Create custom collectors with a simple functional interface:
 ```kotlin
@@ -68,22 +110,31 @@ class MetricsCollector : Monitor.Collector {
 }
 ```
 
-### Rich Monitoring Data
+### Tracing Data with OpenTelemetry
 
-Track method execution with comprehensive data:
+When using `@Traceable`, each method call can:
+- Create a new span
+- Optionally capture parameters in the span as attributes
+- Propagate exceptions as “error” events
+- Wrap suspend functions and `Result` types seamlessly
+
 ```kotlin
-data class Data(
-    val key: String,
-    val durationMillis: Long,
-    val exception: Throwable? = null,
-)
+@Traceable
+interface SomeService {
+    @Traceable.Span(name = "some-operation", captureParameters = ["id"])
+    suspend fun someOperation(id: String): Result<String>
+
+    // Will not produce a span (simply delegates):
+    @Traceable.Ignore
+    fun debugLocalStuff()
+}
 ```
 
 ### Built-in Collectors
 
-Use pre-built collectors or combine them:
+Use the built-in collectors for monitoring, or combine them with your own:
 ```kotlin
-// Simple printing collector
+// Simple printing collector (monitoring only)
 val printer = Monitor.Collectors.Printer()
 
 // Combine multiple collectors
@@ -93,30 +144,27 @@ val composite = Monitor.Collectors.Composite(
 )
 ```
 
-## Setup
-
-Add to your `build.gradle.kts`:
-```kotlin
-plugins {
-    id("com.google.devtools.ksp")
-}
-
-dependencies {
-    ksp("com.example:monitorable-processor:1.0.0")
-    implementation("com.example:monitorable:1.0.0")
-}
-```
+For tracing, you’ll rely on standard OpenTelemetry backends and exporters, e.g., the `InMemorySpanExporter` for testing or Jaeger/Zipkin exporters in production.
 
 ## Complete Example
 
 ```kotlin
 @Monitor.Collectable
+@Traceable
 interface UserService {
+    // Monitored with a custom name, traced with a default name
     @Monitor.Function(name = "get_user")
     fun getUser(id: String): String
 
+    // Traced with a custom name, also monitored
+    @Traceable.Span(name = "validate-user")
     @Monitor.Function(name = "validate")
     fun validate(token: String): Result<Boolean>
+    
+    // Ignored by tracing, but still monitored
+    @Traceable.Ignore
+    @Monitor.Function(name = "sync_local")
+    fun syncLocalCache(): Boolean
 }
 
 class MetricsCollector : Monitor.Collector {
@@ -135,26 +183,31 @@ class MetricsCollector : Monitor.Collector {
 }
 
 fun main() {
+    // Example: Monitoring
     val metrics = MetricsCollector()
-    val service = UserServiceImpl().monitored(
+    val userServiceMonitored = UserServiceImpl().monitored(
         Monitor.Collectors.Printer(),
         metrics
     )
-    
-    // Use the service
-    service.getUser("123")
-    service.validate("token")
-    
-    // Print metrics
+    userServiceMonitored.getUser("123")
+    userServiceMonitored.validate("token")
+    userServiceMonitored.syncLocalCache()
     metrics.printReport()
+    
+    // Example: Tracing
+    val tracer: Tracer = // obtain from your OpenTelemetry setup
+    val userServiceTraced = UserServiceImpl().traced(tracer)
+    userServiceTraced.getUser("456")
+    userServiceTraced.validate("another-token")
+    userServiceTraced.syncLocalCache() // Span is ignored for this method
 }
 ```
 
 ## Design Principles
 
-- **Zero Reflection**: All monitoring code is generated at compile-time
+- **Zero Reflection**: All monitoring and tracing code is generated at compile time
 - **Type Safety**: Generated code is fully type-safe
-- **Composability**: Collectors can be easily combined
+- **Composability**: Collectors (monitoring) or Tracer usage is easily combined
 - **Simplicity**: Minimal API surface with maximum utility
 - **Performance**: Negligible runtime overhead
 
@@ -162,23 +215,13 @@ fun main() {
 
 ### Performance-Optimized Design
 
-A key architectural feature of Monitorable is its use of inline functions via an abstract class for capturing method metrics, rather than using interface-based virtual dispatch:
+A key architectural feature of Monitorable and Traceable is the use of inline functions via an abstract class for capturing method metrics (and spans), rather than using interface-based virtual dispatch. For monitoring, it might look like:
 
 ```kotlin
 abstract class Capturing(val collector: Monitor.Collector) {
-    /**
-     * Internal helper function that performs the actual metric capture.
-     * This function measures the execution time of the provided closure and
-     * delegates the captured metrics to the collector.
-     *
-     * @param key A string identifier for the operation being monitored
-     * @param closure The operation to execute and monitor
-     * @return A [TimedValue] containing both the result and execution duration
-     * @param T The type of value wrapped in the [Result] returned by the closure
-     */
     inline fun <T> capture(
         key: String,
-        closure: () -> Result<T>
+        crossinline closure: () -> Result<T>
     ): TimedValue<Result<T>> {
         val measured = measureTimedValue {
             closure()
@@ -195,34 +238,16 @@ abstract class Capturing(val collector: Monitor.Collector) {
 }
 ```
 
-This design provides several critical performance benefits:
-
-1. **Zero Virtual Dispatch**: Using inline functions eliminates virtual method call overhead that would occur with an interface-based approach
-
-2. **Optimized Stack Traces**: Function inlining reduces stack trace complexity and improves exception handling performance
-
-3. **Efficient Coroutine Support**: Inline functions allow the compiler to optimize suspend function handling without additional state machine overhead
-
-4. **JVM Optimization**: The abstract class design enables better JVM inlining and escape analysis optimizations
-
-The generated monitoring code leverages these optimizations to provide essentially zero-overhead method monitoring. When combined with compile-time code generation, this results in monitoring capabilities with negligible runtime impact.
+For tracing, a similar pattern is used (e.g., `SpanCapturing`) but creating and ending spans with OpenTelemetry.
 
 ### Capturing Process
 
-The monitoring process follows these steps:
-
-1. KSP generates a proxy class that extends your service interface
-2. Each monitored method is wrapped with capture functions
-3. Method execution is timed using Kotlin's `measureTimedValue`
-4. Any exceptions are automatically caught and recorded
-5. Timing and error data is passed to the collector(s)
-6. The original result (or exception) is returned to the caller
-
-This process happens with minimal overhead due to:
-- Compile-time code generation (no reflection)
-- Inlined capture functions (no virtual dispatch)
-- Efficient exception handling
-- Zero-copy metric collection
+1. **KSP generates a proxy class** that extends your service interface.
+2. **Each monitored or traced method** is wrapped with capture functions.
+3. **Method execution is timed or spanned** using Kotlin's `measureTimedValue` or OpenTelemetry.
+4. **Exceptions** are automatically caught and recorded.
+5. **Collected data** is passed to collectors (monitoring) or exported as spans (tracing).
+6. The original result (or exception) is returned to the caller.
 
 ## License
 

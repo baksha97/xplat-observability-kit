@@ -1,29 +1,111 @@
 package com.baksha.observability.app
 
-import kotlin.random.Random
+import com.baksha.observability.core.trace.internal.ProxySpanCapturing
+import io.opentelemetry.api.trace.Tracer
+import io.opentelemetry.exporter.otlp.http.trace.OtlpHttpSpanExporter
+import io.opentelemetry.sdk.OpenTelemetrySdk
+import io.opentelemetry.sdk.resources.Resource
+import io.opentelemetry.sdk.trace.SdkTracerProvider
+import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor
+import io.opentelemetry.semconv.resource.attributes.ResourceAttributes
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlin.time.Duration.Companion.seconds
 
-fun main() {
-    // Create a service with the default `Printer` monitor
-    val service: UserService = UserServiceImpl()
-        .monitored()
+val tracer: Tracer = run {
+    println("Creating OTEL Tracer..")
+    val resource = Resource
+        .builder()
+        .put(ResourceAttributes.SERVICE_NAME, "java-cli-app")
+        .build()
+    val spansIngestUrl = "http://localhost:4318/v1/traces"
+    val logsIngestUrl = "http://localhost:4318/v1/logs"
+    // Set up Jaeger exporter
+    val jaegerExporter = OtlpHttpSpanExporter
+        .builder()
+        .setEndpoint(spansIngestUrl)
+        .build()
 
-    // Simulate a series of operations
-    repeat(5) { iteration ->
-        println("\nIteration ${iteration + 1}")
-        println("===========")
+    // Set up the tracer provider with the Jaeger exporter
+    val tracerProvider = SdkTracerProvider
+        .builder()
+        .setResource(resource)
+        .addSpanProcessor(SimpleSpanProcessor.create(jaegerExporter))
+        .addSpanProcessor(SimpleSpanProcessor.create(ConsoleSpanExporter()))
+        .build()
 
-        // Test getUser
-        runCatching {
-            val userId = "user_${Random.nextInt(1000)}"
-            println("Getting user $userId: ${service.getUser(userId)}")
-        }.onFailure { println("Failed to get user: ${it.message}") }
+    // Set up OpenTelemetry
+    val openTelemetry = OpenTelemetrySdk
+        .builder()
+        .setTracerProvider(tracerProvider)
+        .buildAndRegisterGlobal()
+    openTelemetry.tracerBuilder("com").build()
+}
 
-        // Test validateCredentials
-        service.validateCredentials("testuser", "testuser")
-            .onSuccess { valid -> println("Credentials validation: $valid") }
-            .onFailure { println("Validation failed: ${it.message}") }
+object DefaultCapturingProxy : ProxySpanCapturing(tracer)
 
-        Thread.sleep(1.seconds.inWholeMilliseconds)
+fun debugUserService(): Unit = runBlocking {
+    val userService = UserServiceImpl(TestNested(), TestNested())
+        .traced(tracer)
+    userService.resultFailingSuspendOperation(Exception("Error, World!"))
+    userService.getUser("test")
+    delay(1000)
+}
+
+fun generateRandomSpans() = runBlocking {
+    val generator = RandomProxySpanGenerator(tracer)
+    generator.complexSpanTestRandom()
+    delay(30.seconds)
+}
+
+suspend fun drawManualSpans(capture: ProxySpanCapturing) = with(capture) {
+    withSuspendingSpanCapture("suspend1") {
+        withSuspendingSpanCapture("suspend1.suspend1") { }
+        withSpanCapture("suspend1.sync1") { }
+        withSpanCapture("suspend1.sync2") {
+            withSpanCapture("suspend1.sync.sync1") { }
+            withSpanCapture("suspend1.sync.sync2") { }
+            withSpanCapture("suspend1.sync.sync3") { }
+        }
+        withSpanCapture("suspend1.sync3") {
+            withSpanCapture("suspend1.sync3.sync1") { }
+            withSpanCapture("suspend1.sync3.sync2") { }
+        }
+
+        withSuspendingSpanCapture("suspend1.suspend2") {
+            withSuspendingSpanCapture("suspend1.suspend2.suspend1") { }
+            withSuspendingSpanCapture("suspend1.suspend2.suspend2") { }
+        }
     }
 }
+
+suspend fun drawManualSpansNested(capture: ProxySpanCapturing) = with(capture) {
+    drawManualSpans(capture)
+    drawManualSpans(capture)
+    drawManualSpans(capture)
+    withSuspendingSpanCapture("suspend1") {
+        withSuspendingSpanCapture("suspend1.suspend1") {
+            drawManualSpans(capture)
+        }
+        withSuspendingSpanCapture("suspend1.suspend2") {
+            withSuspendingSpanCapture("suspend1.suspend2.suspend1") {
+                drawManualSpans(capture)
+            }
+            withSuspendingSpanCapture("suspend1.suspend2.suspend2") {
+                drawManualSpans(capture)
+            }
+            drawManualSpans(capture)
+        }
+    }
+}
+
+
+fun main() = runBlocking {
+    drawManualSpans(DefaultCapturingProxy)
+//    val generator = RandomSpanGenerator(tracer)
+//    generator.complexSpanTestRandom()
+    delay(30.seconds)
+}
+
+
+

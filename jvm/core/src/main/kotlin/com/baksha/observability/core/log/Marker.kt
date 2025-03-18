@@ -1,4 +1,4 @@
-package com.baksha.observability.core.logging
+package com.baksha.observability.core.log
 
 /** A independent marker to enrich log statements. */
 public interface Marker {

@@ -1,5 +1,6 @@
-package com.baksha.observability.core
+package com.baksha.observability.core.collect.internal
 
+import com.baksha.observability.core.collect.Collector
 import kotlin.time.TimedValue
 import kotlin.time.measureTimedValue
 
@@ -19,13 +20,13 @@ import kotlin.time.measureTimedValue
  * - Avoid having to explicitly deal with suspend functions
  * - Limit impact on the call stack since it's called in place
  */
-public abstract class Capturing(
+public abstract class ProxyEventCollecting(
     /**
      * The collector responsible for handling captured metrics.
      * Implementations will receive timing information and any exceptions that occur
      * during method execution.
      */
-    public val collector: Monitor.Collector
+    public val collector: Collector
 ) {
 
     /**
@@ -81,7 +82,7 @@ public abstract class Capturing(
             closure()
         }
         collector.collect(
-            Monitor.Data(
+            Collector.Data(
                 key = key,
                 durationMillis = measured.duration.inWholeMilliseconds,
                 exception = measured.value.exceptionOrNull()
