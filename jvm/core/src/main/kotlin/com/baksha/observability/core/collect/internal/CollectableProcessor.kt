@@ -33,8 +33,8 @@ private const val COLLECTOR_SIMPLE_TYPE = "Collector"
 private const val DEFAULT_COLLECTOR_SIMPLE_TYPE = "Collector.console"
 private const val COMPOSITE_COLLECTOR_SIMPLE_TYPE = "Collector.composite"
 
-private const val PACKAGE = "com.baksha.observability.core"
-
+private const val PACKAGE = "com.baksha.observability.core.collect"
+private const val PACKAGE_INTERNAL = "com.baksha.observability.core.collect.internal"
 internal class CollectableProcessor(
     private val codeGenerator: CodeGenerator,
     private val logger: KSPLogger
@@ -74,13 +74,13 @@ internal class CollectableProcessor(
     private fun processInterface(declaration: KSClassDeclaration) {
         val packageName = declaration.packageName.asString()
         val interfaceName = declaration.simpleName.asString()
-        val proxyClassName = "${interfaceName}MonitoringProxy"
+        val proxyClassName = "${interfaceName}EventProxy"
 
         // Create the proxy class as private with superclass constructor call
         val classBuilder = TypeSpec.classBuilder(proxyClassName)
             .addModifiers(KModifier.PRIVATE)
             .addSuperinterface(declaration.toClassName())
-            .superclass(ClassName(PACKAGE, "ProxyEventCollecting"))
+            .superclass(ClassName(PACKAGE_INTERNAL, "ProxyEventCollecting"))
 
         // Create constructor that directly calls super constructor with collector
         val constructorBuilder = FunSpec.constructorBuilder()
@@ -134,8 +134,8 @@ internal class CollectableProcessor(
         val extensionFunVararg = createExtensionVarargFunction(declaration.toClassName(), proxyClassName)
 
         val file = FileSpec.builder(packageName, proxyClassName)
-            .addImport(PACKAGE, "collect.Collector")
-            .addImport(PACKAGE, "collect.internal.ProxyEventCollecting")
+            .addImport(PACKAGE, "Collector")
+            .addImport(PACKAGE_INTERNAL, "ProxyEventCollecting")
             .addType(classBuilder.build())
             .addFunction(extensionFun)
             .addFunction(extensionFunVararg)

@@ -1,5 +1,5 @@
 package com.baksha.observability.app
-import com.baksha.observability.core.Monitor
+import com.baksha.observability.core.collect.Collectable
 import com.baksha.observability.core.trace.Traceable
 import kotlin.random.Random
 
@@ -41,7 +41,7 @@ import kotlin.random.Random
  * )
  *```
  */
-@Monitor.Collectable
+@Collectable
 @Traceable
 interface UserService {
     var mutating: Int
@@ -51,7 +51,7 @@ interface UserService {
     val nestedRequired: Nested
     val nestedOptional: Nested?
 
-    @Monitor.Function("get_user")
+    @Collectable.Function("get_user")
     @Traceable.Span(
         name = "getUser_demo",
         captureParameters = ["id"],
@@ -59,13 +59,13 @@ interface UserService {
     )
     fun getUser(id: String): String
 
-    @Monitor.Function("validate_credentials")
+    @Collectable.Function("validate_credentials")
     fun validateCredentials(username: String, password: String): Result<Boolean>
 
-    @Monitor.Function("successful_operation")
+    @Collectable.Function("successful_operation")
     fun successfulOperation(input: String): String
 
-    @Monitor.Function("successful_suspend_operation")
+    @Collectable.Function("successful_suspend_operation")
     suspend fun successfulSuspendOperation(input: String): String
     @Traceable.Span(
         name = "failingOperation_demo",
@@ -85,17 +85,17 @@ interface UserService {
 
     suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
 
-    @Monitor.Function("result_failed_op")
+    @Collectable.Function("result_failed_op")
     fun resultFailingOperation(exception: Exception): Result<String>
 
-    @Monitor.Function("result_failed_suspend_op")
+    @Collectable.Function("result_failed_suspend_op")
     suspend fun resultFailingSuspendOperation(exception: Exception): Result<String>
 
-    @Monitor.Collectable
+    @Collectable
     interface Nested {
         var mutating: Int
         val sample: Int?
-        @Monitor.Function("nested_result_successful_suspend_op")
+        @Collectable.Function("nested_result_successful_suspend_op")
         suspend fun resultSucceedingSuspendOperation(input: String): Result<String>
     }
 }
