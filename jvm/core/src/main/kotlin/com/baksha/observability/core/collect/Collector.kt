@@ -19,11 +19,13 @@ public fun interface Collector {
      * @property key The identifier for the monitored operation
      * @property durationMillis The execution time in milliseconds
      * @property exception Any exception that occurred during execution, or null if successful
+     * @property attributes Additional attributes collected during the operation
      */
     public data class Data(
         val key: String,
         val durationMillis: Long,
         val exception: Throwable? = null,
+        val attributes: Map<String, String> = emptyMap()
     )
 
     companion object {

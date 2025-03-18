@@ -253,22 +253,36 @@ internal class CollectableProcessor(
             .build()
     }
 
-    private fun extractMethodName(function: KSFunctionDeclaration): String {
-        val monitorMethodAnnotation = function.annotations.find {
+    private fun extractFunctionData(function: KSFunctionDeclaration): Triple<String, List<String>, List<String>> {
+        val annotation = function.annotations.find {
             it.annotationType.resolve().declaration.qualifiedName?.asString() == FUNCTION_ANNOTATION_FQN
-        }
+        } ?: return Triple(function.simpleName.asString(), emptyList(), emptyList())
 
-        return monitorMethodAnnotation?.arguments?.firstOrNull {
-            it.name?.asString() == "name"
-        }?.value as? String
-            ?: function.simpleName.asString()
+        // name
+        val functionName = annotation.arguments
+            .find { it.name?.asString() == "name" }
+            ?.value as? String ?: function.simpleName.asString()
+
+        // captureParameters
+        @Suppress("UNCHECKED_CAST")
+        val captureParams = (annotation.arguments
+            .find { it.name?.asString() == "captureParameters" }
+            ?.value as? List<String>) ?: emptyList()
+
+        // additionalContextFromAttributes
+        @Suppress("UNCHECKED_CAST")
+        val additionalAttrs = (annotation.arguments
+            .find { it.name?.asString() == "additionalContextFromAttributes" }
+            ?.value as? List<String>) ?: emptyList()
+
+        return Triple(functionName, captureParams, additionalAttrs)
     }
 
     private fun generateMonitoredFunction(
         function: KSFunctionDeclaration,
         classBuilder: TypeSpec.Builder,
     ) {
-        val methodName = extractMethodName(function)
+        val (methodName, captureParams, additionalAttrs) = extractFunctionData(function)
         val methodBuilder = FunSpec.builder(function.simpleName.asString())
             .addModifiers(KModifier.OVERRIDE)
 
@@ -292,11 +306,17 @@ internal class CollectableProcessor(
 
         val captureMethod = if (isResultReturn) "withResultCapture" else "withThrowingCapture"
 
-        val code = """
-            |return $captureMethod("$methodName") {
-            |    $implCall
-            |}
-            """.trimMargin()
+        val code = buildString {
+            appendLine("return $captureMethod(\"$methodName\") {")
+            captureParams.forEach { capturedParam ->
+                appendLine("    addAttribute(\"$capturedParam\", $capturedParam.toString())")
+            }
+            additionalAttrs.forEach { attr ->
+                appendLine("    addAttribute(\"$attr\", underlying.$attr.toString())")
+            }
+            appendLine("    $implCall")
+            appendLine("}")
+        }
 
         methodBuilder.addCode(code)
         classBuilder.addFunction(methodBuilder.build())

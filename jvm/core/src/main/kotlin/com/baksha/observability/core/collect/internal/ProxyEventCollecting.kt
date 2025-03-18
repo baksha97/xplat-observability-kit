@@ -30,6 +30,22 @@ public abstract class ProxyEventCollecting(
 ) {
 
     /**
+     * A mutable scope that holds a reference to a mutable Collector.Data
+     * and allows the generation of addAttribute(key, value)
+     */
+    public class DataBuilderScope(private var data: Collector.Data) {
+        fun addAttribute(key: String, value: String) {
+            data = data.copy(attributes = data.attributes + (key to value))
+        }
+        fun setDuration(durationMillis: Long) {
+            data = data.copy(durationMillis = durationMillis)
+        }
+        fun setException(exception: Throwable?) {
+            data = data.copy(exception = exception)
+        }
+    }
+
+    /**
      * Executes a throwing operation while capturing its execution metrics.
      * If the operation throws an exception, it will be captured and then rethrown.
      *
@@ -41,9 +57,9 @@ public abstract class ProxyEventCollecting(
      */
     public inline fun <E> withThrowingCapture(
         key: String,
-        closure: () -> E
+        closure: DataBuilderScope.() -> E
     ): E =
-        capture(key) { runCatching { closure() } }
+        capture(key) { data -> runCatching { DataBuilderScope(data).closure() } }
             .value
             .getOrThrow()
 
@@ -59,9 +75,9 @@ public abstract class ProxyEventCollecting(
      */
     public inline fun <E> withResultCapture(
         key: String,
-        closure: () -> Result<E>
+        closure: DataBuilderScope.() -> Result<E>
     ): Result<E> =
-        capture(key) { closure() }
+        capture(key) { data -> DataBuilderScope(data).closure() }
             .value
 
     /**
@@ -76,17 +92,14 @@ public abstract class ProxyEventCollecting(
      */
     public inline fun <T> capture(
         key: String,
-        closure: () -> Result<T>
+        closure: (data: Collector.Data) -> Result<T>
     ): TimedValue<Result<T>> {
+        val data = Collector.Data(key = key, durationMillis = 0, attributes = mutableMapOf())
         val measured = measureTimedValue {
-            closure()
+            closure(data)
         }
         collector.collect(
-            Collector.Data(
-                key = key,
-                durationMillis = measured.duration.inWholeMilliseconds,
-                exception = measured.value.exceptionOrNull()
-            )
+            data.copy(durationMillis = measured.duration.inWholeMilliseconds)
         )
         return measured
     }

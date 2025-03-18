@@ -238,6 +238,36 @@ class CollectableProcessorTest {
             assertNull(exception)
         }
     }
+
+    @Test
+    fun `test capture parameters are collected`() {
+        val input = "TestInput"
+        val result = sut.successfulOperation(input)
+        assertEquals(input, result)
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("successful_operation", key)
+            assertNull(exception)
+            // Assuming attributes are stored in a map within Data
+            assertEquals(input, attributes["input"])
+        }
+    }
+
+    @Test
+    fun `test additional context from attributes are collected`() {
+        val input = "TestInput"
+        val result = sut.resultSucceedingOperation(input)
+        assertTrue(result.isSuccess)
+        assertEquals(input, result.getOrThrow())
+        assertEquals(1, collector.collectedData.size)
+        with(collector.collectedData.first()) {
+            assertEquals("result_succ_op", key)
+            assertNull(exception)
+            // Assuming attributes are stored in a map within Data
+            assertEquals(input, attributes["input"])
+            assertEquals(sut.sample.toString(), attributes["sample"])
+        }
+    }
 }
 
 class TestCollector : Collector {
@@ -260,7 +290,7 @@ interface TestInterface {
     val nestedRequired: Nested
     val nestedOptional: Nested?
 
-    @Collectable.Function("successful_operation")
+    @Collectable.Function("successful_operation", captureParameters = ["input"])
     fun successfulOperation(input: String): String
 
     @Collectable.Function("successful_suspend_operation")
